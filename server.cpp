@@ -1,5 +1,5 @@
-#include "server.hpp"
 #include "inc.hpp"
+#include "server.hpp"
 
 Server::Server(std::string serverPass, std::string serverPort) : serverPass(serverPass), serverPort(serverPort){}
 
@@ -102,8 +102,8 @@ void Server::acceptConnections(){
 
             if (fd == this->socketFd){
 
-                struct sockaddr_storage client_addr;
-                socklen_t addr_len = sizeof(client_addr);
+                // struct sockaddr_storage client_addr;
+                // socklen_t addr_len = sizeof(client_addr);
 
                 int client_fd = accept(fd, NULL, NULL);
                 if (client_fd < 0){
@@ -128,26 +128,28 @@ void Server::acceptConnections(){
                     initSocketsError("epoll_ctl", this->socketFd, NULL);
                 }
 
-                char ipstr[INET6_ADDRSTRLEN];
-                char portstr[NI_MAXSERV];
+                // char ipstr[INET6_ADDRSTRLEN];
+                // char portstr[NI_MAXSERV];
 
-                int rc = getnameinfo(
-                            (struct sockaddr*)&client_addr,
-                            addr_len,
-                            ipstr,
-                            sizeof(ipstr),
-                            portstr,
-                            sizeof(portstr),
-                            NI_NUMERICHOST | NI_NUMERICSERV
-                        );
+                // int rc = getnameinfo(
+                //             (struct sockaddr*)&client_addr,
+                //             addr_len,
+                //             ipstr,
+                //             sizeof(ipstr),
+                //             portstr,
+                //             sizeof(portstr),
+                //             NI_NUMERICHOST | NI_NUMERICSERV
+                //         );
 
-                if (rc != 0){
+                // if (rc != 0){
 
-                    std::cerr << "getnameinfo: " << gai_strerror(rc) << std::endl;
-                    this->client_fds.push_back(std::make_pair(client_fd, std::make_pair("unknown", "unknown")));
-                }
+                //     std::cerr << "getnameinfo: " << gai_strerror(rc) << std::endl;
+                //     this->client_fds.push_back(std::make_pair(client_fd, std::make_pair("unknown", "unknown")));
+                // }
 
-                this->client_fds.push_back(std::make_pair(client_fd, std::make_pair(ipstr, portstr)));
+                // std::cout << "client fd;" << client_fd << " " << ipstr << ':' << portstr << std::endl;
+                
+                // this->client_fds.push_back(std::make_pair(client_fd, std::make_pair(ipstr, portstr)));
                 continue;
             }
             else {
