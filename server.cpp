@@ -185,15 +185,20 @@ void Server::readReq(int client_fd){
 void Server::parseCmd(int client_fd){
 
     size_t last = this->clients[client_fd].second.buffer.size() - 3;
-    std::stringstream bufferStream(this->clients[client_fd].second.buffer.substr(0, last));
+    std::string buffer =  this->clients[client_fd].second.buffer.substr(0, last);
 
-    if (this->clients[client_fd].second.buffer[0] == ':'){
-
-        // extract prefix
+    if (buffer[0] == ':'){
 
         std::string prefix;
 
-        bufferStream >> prefix;
+        size_t prefixl;
+        for(prefixl = 0; prefixl < buffer.size(); prefixl++){
+
+            if (buffer[prefixl] == ' ')
+                break;
+        }
+
+        prefix = buffer.substr(0, prefixl - 1);
 
         int pos;
         for (int i = 0; i < prefix.size(); i++){
@@ -205,22 +210,31 @@ void Server::parseCmd(int client_fd){
             }
         }
 
-        this->clients[client_fd].second.prefix = prefix.substr(1, pos);
+        this->clients[client_fd].second.prefix = prefix.substr(1, pos - 1);
+
+        if (prefixl + 1 < buffer.size())
+            buffer = buffer.substr(prefixl + 1);
+        else
+            buffer = "";
     }
 
     std::string command;
 
-    bufferStream >> command;
+    int commandl;
+    for(commandl = 0; commandl < buffer.size(); commandl++){
 
-    size_t pos = command.find_first_not_of(' ');
-    if (pos == std::string::npos){
-
-        // no command found
-        clearClientData(client_fd);
-        serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+        if (buffer[commandl] == ' ')
+            break;
     }
 
-    command = command.substr(pos);
+    if (commandl > 0)
+        command = buffer.substr(0, commandl - 1);
+    else{
+
+        clearClientData(client_fd);
+        serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+        return;
+    }
 
     for (int i = 0; i < command.size(); i++){
 
@@ -235,34 +249,40 @@ void Server::parseCmd(int client_fd){
 
     this->clients[client_fd].second.command = command;
 
-    while(!bufferStream.eof()){
+    if (commandl + 1 < buffer.size())
+        buffer = buffer.substr(commandl + 1);
+    else{
+
+        this->clients[client_fd].second.buffer.clear();
+        // responde to message
+        return;
+    }
+
+    while(buffer.size()){
 
         std::string param;
 
-        bufferStream >> param;
+        size_t pos = buffer.find_first_not_of(' ');
 
-        size_t pos = param.find_first_not_of(' ');
         if (pos == std::string::npos){
 
             this->clients[client_fd].second.buffer.clear();
+            // respond to message
             return ;
         }
 
-        param = param.substr(pos);
+        param = buffer.substr(0, pos - 1);
+
+        if (pos + 1 < buffer.size())
+            buffer = buffer.substr(pos + 1);
+        else
+            buffer = "";
 
         if (param[0] == ':'){
 
             this->clients[client_fd].second.params.push_back(param.substr(1));
             this->clients[client_fd].second.buffer.clear();
-            return ;
-        }
-
-        if (param.find(':') != std::string::npos){
-
-            // throw bad param
-            // delelte message
-            clearClientData(client_fd);
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            // responde to message
             return ;
         }
 
@@ -273,7 +293,7 @@ void Server::parseCmd(int client_fd){
 
         serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
         return ;
-    }
+    }    
 }
 
 void Server::serverResponse(int client_fd, enum status status){
