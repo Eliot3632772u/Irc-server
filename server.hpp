@@ -6,7 +6,8 @@
 #include "client.hpp"
 #include "channel.hpp"
 
-enum status{
+enum status
+{
 
     ERR_NOSUCHNICK = 401,
     ERR_INPUTTOOLONG = 417, // DOES NOT EXITS
@@ -20,7 +21,8 @@ enum status{
     ERR_NICKNAMEINUSE = 433,
 };
 
-struct Server {
+struct Server
+{
 
     int socketFd;
     int epollFd;
