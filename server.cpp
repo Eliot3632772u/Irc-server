@@ -461,8 +461,10 @@ void Server::nickCMD(int client_fd)
             return;
         }
     }
-
     this->clients[client_fd].second.nick = this->clients[client_fd].second.params.front();
+
+	if (!this->clients[client_fd].second.user.empty())
+		this->clients[client_fd].second.authenticated = true;
 }
 
 void Server::userCMD(int client_fd)
@@ -481,7 +483,24 @@ void Server::userCMD(int client_fd)
 		return;
 	}
 
+	if (this->clients[client_fd].second.params.front().size() > 9)
+	{
+		serverResponse(client_fd, status::ERR_NEEDMOREPARAMS); // check
+		clearClientData(client_fd);
+		return;
+	}
 
+	if (this->clients[client_fd].second.params.front().find('@') != std::string::npos)
+	{
+		serverResponse(client_fd, status::ERR_NEEDMOREPARAMS); // check
+		clearClientData(client_fd);
+		return;
+	}
+
+	this->clients[client_fd].second.user = this->clients[client_fd].second.params.front();
+
+	if (!this->clients[client_fd].second.nick.empty())
+		this->clients[client_fd].second.authenticated = true;
 }
 
 void Server::joinCMD(int client_fd)
