@@ -18,6 +18,7 @@ struct Channel{
     std::vector<std::string> members;
     std::vector<std::string> operators;
     std::vector<std::string> invited_users;
+    std::vector<std::string> ban_list;
     int userlimit;
     bool is_invite_only;
 

@@ -121,7 +121,7 @@ void Server::acceptConnections(){
                     close(client_fd);
                     for(int i = 0; i < this->clients.size(); i++)
                         close(this->clients[i].first);
-                    
+
                     initSocketsError("epoll_ctl", this->socketFd, NULL);
                 }
 
@@ -162,7 +162,7 @@ void Server::readReq(int client_fd){
 
         this->clients[client_fd].second.buffer.erase();
         // throw message too long
-        serverResponse(client_fd, status::ERR_INPUTTOOLONG);
+        serverResponse(client_fd, status::ERR_INPUTTOOLONG); // check
         return ;
     }
     
@@ -174,10 +174,11 @@ void Server::readReq(int client_fd){
 
             if (this->clients[client_fd].second.buffer.size() == 2){
 
-                this->clients[client_fd].second.buffer.erase();
+                this->clients[client_fd].second.buffer.erase(); // possible mistake
                 return ;
             }
             // parse message
+            parseCmd(client_fd);
         }
     } 
 }
@@ -212,15 +213,23 @@ void Server::parseCmd(int client_fd){
 
     bufferStream >> command;
 
-    size_t pos = command.find_first_not_of(' ');
-    if (pos == std::string::npos){
+     //"     CMD     "
 
-        // no command found
-        clearClientData(client_fd);
+    // size_t pos = command.find_first_not_of(' '); // simply check .empty() .size() == 0
+    // if (pos == std::string::npos){
+
+    //     // no command found
+    //     clearClientData(client_fd);
+    //     serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+    // }
+
+    // command = command.substr(pos);
+
+    if (command.empty())
+    {
+         clearClientData(client_fd);
         serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
     }
-
-    command = command.substr(pos);
 
     for (int i = 0; i < command.size(); i++){
 
@@ -234,7 +243,6 @@ void Server::parseCmd(int client_fd){
     }
 
     this->clients[client_fd].second.command = command;
-
     while(!bufferStream.eof()){
 
         std::string param;
@@ -245,6 +253,7 @@ void Server::parseCmd(int client_fd){
         if (pos == std::string::npos){
 
             this->clients[client_fd].second.buffer.clear();
+            // handle message
             return ;
         }
 
@@ -254,17 +263,18 @@ void Server::parseCmd(int client_fd){
 
             this->clients[client_fd].second.params.push_back(param.substr(1));
             this->clients[client_fd].second.buffer.clear();
+            // handle message
             return ;
         }
 
-        if (param.find(':') != std::string::npos){
+        // if (param.find(':') != std::string::npos){
 
-            // throw bad param
-            // delelte message
-            clearClientData(client_fd);
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
-            return ;
-        }
+        //     // throw bad param
+        //     // delelte message
+        //     clearClientData(client_fd);
+        //     serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        //     return ;
+        // }
 
         this->clients[client_fd].second.params.push_back(param);
     }
@@ -288,3 +298,196 @@ void Server::clearClientData(int client_fd){
     this->clients[client_fd].second.command.clear();
     this->clients[client_fd].second.params.clear();
 }
+
+void Server::handleMessage(int client_fd)
+{
+	if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
+	{
+		serverResponse(client_fd, status::ERR_NOSUCHNICK);
+		clearClientData(client_fd);
+		return ;
+	}
+
+	if (this->clients[client_fd].second.command == "PASS")
+        passCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "NICK")
+        nickCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "USER")
+        userCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "JOIN")
+        joinCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "PRIVMSG")
+        privmsgCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "KICK")
+        kickCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "INVITE")
+        inviteCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "TOPIC")
+        topicCMD(client_fd);
+	else if (this->clients[client_fd].second.command == "MODE")
+        modeCMD(client_fd);
+	else
+	{
+		serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+		clearClientData(client_fd);
+		return ;
+	}
+}
+
+void Server::passCMD(int client_fd)
+{
+    if (this->clients[client_fd].second.is_pass_set)
+    {
+        serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+        clearClientData(client_fd);
+        return ;
+    }
+    
+    if (this->clients[client_fd].second.params.size() > 1)
+    {
+        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        clearClientData(client_fd);
+        return ;
+    }
+
+    if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.front() != this->serverPass)
+    {
+        serverResponse(client_fd, status::ERR_PASSWDMISMATCH);
+        clearClientData(client_fd);
+        return ;
+    }
+
+    this->clients[client_fd].second.is_pass_set = true;
+}
+
+std::string toLowerScandi(std::string& str)
+{
+    std::string lower = str;
+    for (size_t i = 0; i < str.size(); i++)
+    {
+        char& c = str[i];
+        if (c >= 'A' && c <= 'Z')
+            lower[i] = c + 32;
+        else if (c == '[')
+            lower[i] = '{';
+        else if (c == ']')
+            lower[i] = '}';
+        else if (c == '\\')
+            lower[i] = '|';
+        else if (c == '~')
+            lower[i] = '^';
+    }
+    return lower;
+}
+
+void Server::nickCMD(int client_fd)
+{
+    if (this->clients[client_fd].second.is_pass_set == false)
+    {
+        serverResponse(client_fd, status::ERR_PASSWDMISMATCH);
+        clearClientData(client_fd);
+        return;
+    }
+
+    if (this->clients[client_fd].second.params.size() > 1)
+    {
+        serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+        clearClientData(client_fd);
+        return;
+    }
+
+    if (this->clients[client_fd].second.params.empty())
+    {
+        serverResponse(client_fd, status::ERR_NONICKNAMEGIVEN);
+        clearClientData(client_fd);
+        return;
+    }
+
+    for (size_t i = 0; i < this->clients.size(); i++)
+    {
+        if (this->clients[i].second.nick == this->clients[client_fd].second.params.front())
+        {
+            serverResponse(client_fd, status::ERR_NICKNAMEINUSE);
+            clearClientData(client_fd);
+            return;
+        }
+    }
+
+    if (this->clients[client_fd].second.params.front().size() > 9)
+    {
+        serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+        clearClientData(client_fd);
+        return;
+    }
+
+    char& c = this->clients[client_fd].second.params.front()[0];
+    if (!std::isalpha(c) && std::string("[]\\`_^{|}").find(c) == std::string::npos)
+    {
+        serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+        clearClientData(client_fd);
+        return;
+    }
+
+    for (size_t i = 1; i < this->clients[client_fd].second.params.front().size(); i++)
+    {
+        char& c = this->clients[client_fd].second.params.front()[i];
+        if (!std::isalnum(c) && std::string("[]\\`_^{|}").find(c) == std::string::npos)
+        {
+            serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+            clearClientData(client_fd);
+            return;
+        }
+    }
+
+    this->clients[client_fd].second.nick = this->clients[client_fd].second.params.front();
+}
+
+void Server::userCMD(int client_fd)
+{
+	if (this->clients[client_fd].second.authenticated)
+	{
+		serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+		clearClientData(client_fd);
+		return;	
+	}
+
+	if (this->clients[client_fd].second.params.size() != 4)
+	{
+		serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+		clearClientData(client_fd);
+		return;
+	}
+
+	
+}
+
+void Server::joinCMD(int client_fd)
+{
+
+}
+
+void Server::privmsgCMD(int client_fd)
+{
+
+}
+
+void Server::kickCMD(int client_fd)
+{
+
+}
+
+void Server::inviteCMD(int client_fd)
+{
+
+}
+
+void Server::topicCMD(int client_fd)
+{
+
+}
+
+void Server::modeCMD(int client_fd)
+{
+
+}
+
