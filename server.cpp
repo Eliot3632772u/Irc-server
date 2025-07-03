@@ -170,14 +170,26 @@ void Server::readReq(int client_fd){
 
     if (bufferString.size() > 1){
 
-        if ((bufferString[bufferString.size() - 1] == '\n' || bufferString[bufferString.size() - 2] == '\r')){
+        if ((bufferString[bufferString.size() - 1] == '\n' && bufferString[bufferString.size() - 2] == '\r')){
 
             if (this->clients[client_fd].second.buffer.size() == 2){
 
-                this->clients[client_fd].second.buffer.erase(); // possible mistake
+                this->clients[client_fd].second.buffer.erase();
                 return ;
             }
             // parse message
+			size_t last = this->clients[client_fd].second.buffer.size() - 3;
+    		this->clients[client_fd].second.buffer =  this->clients[client_fd].second.buffer.substr(0, last);
+
+			for(int i = 0; i < 	this->clients[client_fd].second.buffer.size(); i++){
+
+				if (this->clients[client_fd].second.buffer[i] == '\r' || this->clients[client_fd].second.buffer[i] == '\n'){
+
+					this->clients[client_fd].second.buffer.clear();
+					return;
+				}
+			}
+
             parseCmd(client_fd);
         }
     } 
@@ -185,8 +197,7 @@ void Server::readReq(int client_fd){
 
 void Server::parseCmd(int client_fd){
 
-    size_t last = this->clients[client_fd].second.buffer.size() - 3;
-    std::string buffer =  this->clients[client_fd].second.buffer.substr(0, last);
+    std::string buffer =  this->clients[client_fd].second.buffer;
 
     if (buffer[0] == ':'){
 
@@ -470,7 +481,7 @@ void Server::userCMD(int client_fd)
 		return;
 	}
 
-	
+
 }
 
 void Server::joinCMD(int client_fd)
