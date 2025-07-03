@@ -102,9 +102,6 @@ void Server::acceptConnections(){
 
             if (fd == this->socketFd){
 
-                // struct sockaddr_storage client_addr;
-                // socklen_t addr_len = sizeof(client_addr);
-
                 int client_fd = accept(fd, NULL, NULL);
                 if (client_fd < 0){
 
@@ -122,41 +119,172 @@ void Server::acceptConnections(){
                     
                     close(this->epollFd);
                     close(client_fd);
-                    for(int i = 0; i < this->client_fds.size(); i++)
-                        initSocketsError(NULL, this->client_fds[i].first, NULL);
+                    for(int i = 0; i < this->clients.size(); i++)
+                        close(this->clients[i].first);
                     
                     initSocketsError("epoll_ctl", this->socketFd, NULL);
                 }
 
-                // char ipstr[INET6_ADDRSTRLEN];
-                // char portstr[NI_MAXSERV];
+                this->clients[client_fd].second.client_fd = client_fd;
 
-                // int rc = getnameinfo(
-                //             (struct sockaddr*)&client_addr,
-                //             addr_len,
-                //             ipstr,
-                //             sizeof(ipstr),
-                //             portstr,
-                //             sizeof(portstr),
-                //             NI_NUMERICHOST | NI_NUMERICSERV
-                //         );
-
-                // if (rc != 0){
-
-                //     std::cerr << "getnameinfo: " << gai_strerror(rc) << std::endl;
-                //     this->client_fds.push_back(std::make_pair(client_fd, std::make_pair("unknown", "unknown")));
-                // }
-
-                // std::cout << "client fd;" << client_fd << " " << ipstr << ':' << portstr << std::endl;
-                
-                // this->client_fds.push_back(std::make_pair(client_fd, std::make_pair(ipstr, portstr)));
                 continue;
             }
             else {
                 
                 // parse cmd
+                readReq(fd);
             }
 
         }
     }
+}
+
+
+void Server::readReq(int client_fd){
+
+    char buffer[550] = {0};
+
+    ssize_t read_bytes;
+    if ((read_bytes = read(client_fd, buffer, 549)) == -1)
+        return ;
+
+    if (read_bytes == 0){
+
+        // delete_client
+        close(client_fd);
+        this->clients.erase(client_fd);
+        return;
+    }
+
+    std::string bufferString = buffer;
+
+    if (bufferString.size() + this->clients[client_fd].second.buffer.size() > 512){
+
+        this->clients[client_fd].second.buffer.erase();
+        // throw message too long
+        serverResponse(client_fd, status::ERR_INPUTTOOLONG);
+        return ;
+    }
+    
+    this->clients[client_fd].second.buffer += bufferString;
+
+    if (bufferString.size() > 1){
+
+        if ((bufferString[bufferString.size() - 1] == '\n' || bufferString[bufferString.size() - 2] == '\r')){
+
+            if (this->clients[client_fd].second.buffer.size() == 2){
+
+                this->clients[client_fd].second.buffer.erase();
+                return ;
+            }
+            // parse message
+        }
+    } 
+}
+
+void Server::parseCmd(int client_fd){
+
+    size_t last = this->clients[client_fd].second.buffer.size() - 3;
+    std::stringstream bufferStream(this->clients[client_fd].second.buffer.substr(0, last));
+
+    if (this->clients[client_fd].second.buffer[0] == ':'){
+
+        // extract prefix
+
+        std::string prefix;
+
+        bufferStream >> prefix;
+
+        int pos;
+        for (int i = 0; i < prefix.size(); i++){
+
+            if (prefix[i] == '!' || prefix[i] == '@'){
+
+                pos = i;
+                break;
+            }
+        }
+
+        this->clients[client_fd].second.prefix = prefix.substr(1, pos);
+    }
+
+    std::string command;
+
+    bufferStream >> command;
+
+    size_t pos = command.find_first_not_of(' ');
+    if (pos == std::string::npos){
+
+        // no command found
+        clearClientData(client_fd);
+        serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+    }
+
+    command = command.substr(pos);
+
+    for (int i = 0; i < command.size(); i++){
+
+        if (!isalpha(command[i])){
+
+            // throw not valid command 
+            clearClientData(client_fd);
+            serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+            return;
+        }
+    }
+
+    this->clients[client_fd].second.command = command;
+
+    while(!bufferStream.eof()){
+
+        std::string param;
+
+        bufferStream >> param;
+
+        size_t pos = param.find_first_not_of(' ');
+        if (pos == std::string::npos){
+
+            this->clients[client_fd].second.buffer.clear();
+            return ;
+        }
+
+        param = param.substr(pos);
+
+        if (param[0] == ':'){
+
+            this->clients[client_fd].second.params.push_back(param.substr(1));
+            this->clients[client_fd].second.buffer.clear();
+            return ;
+        }
+
+        if (param.find(':') != std::string::npos){
+
+            // throw bad param
+            // delelte message
+            clearClientData(client_fd);
+            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            return ;
+        }
+
+        this->clients[client_fd].second.params.push_back(param);
+    }
+
+    if (this->clients[client_fd].second.params.size() > 15){
+
+        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        return ;
+    }
+}
+
+void Server::serverResponse(int client_fd, enum status status){
+
+
+}
+
+void Server::clearClientData(int client_fd){
+
+    this->clients[client_fd].second.buffer.clear();
+    this->clients[client_fd].second.prefix.clear();
+    this->clients[client_fd].second.command.clear();
+    this->clients[client_fd].second.params.clear();
 }
