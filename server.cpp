@@ -405,7 +405,7 @@ void Server::botCMD(int client_fd){
             "\n"
             BLUE "9. MODE <#channel> <flags> [params]\n" RESET
             "\n"
-            BLUE "10. BOT {help | time}\n" RESET;
+            BLUE "10. BOT {help | time}" RESET "\r\n";
 
         send(client_fd, help_message.c_str(), help_message.size(), MSG_NOSIGNAL);
         clearClientData(client_fd);
