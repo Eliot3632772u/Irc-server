@@ -8,7 +8,6 @@
 
 enum status
 {
-
     ERR_NOSUCHNICK = 401,
     ERR_INPUTTOOLONG = 417, // DOES NOT EXITS
     ERR_UNKNOWNCOMMAND = 421,
@@ -42,8 +41,8 @@ struct Server
 
     int socketFd;
     int epollFd;
-    std::string serverPort;
     std::string serverPass;
+    std::string serverPort;
     std::map<int, std::pair<int, Client> > clients;
     std::map<std::string, Channel> channels;
 

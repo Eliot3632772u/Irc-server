@@ -1,6 +1,7 @@
 #pragma once 
 
 #include "inc.hpp"
+#include "client.hpp"
 
 struct Channel
 {

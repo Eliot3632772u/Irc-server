@@ -129,7 +129,7 @@ void Server::acceptConnections()
 
                     close(this->epollFd);
                     close(client_fd);
-                    for (int i = 0; i < this->clients.size(); i++)
+                    for (size_t i = 0; i < this->clients.size(); i++)
                         close(this->clients[i].first);
 
                     initSocketsError("epoll_ctl", this->socketFd, NULL);
@@ -174,7 +174,7 @@ void Server::readReq(int client_fd)
 
         this->clients[client_fd].second.buffer.erase();
         // throw message too long
-        serverResponse(client_fd, status::ERR_INPUTTOOLONG); // check
+        serverResponse(client_fd, ERR_INPUTTOOLONG); // check
         return;
     }
 
@@ -196,7 +196,7 @@ void Server::readReq(int client_fd)
             size_t last = this->clients[client_fd].second.buffer.size() - 3;
             this->clients[client_fd].second.buffer = this->clients[client_fd].second.buffer.substr(0, last);
 
-            for (int i = 0; i < this->clients[client_fd].second.buffer.size(); i++)
+            for (size_t i = 0; i < this->clients[client_fd].second.buffer.size(); i++)
             {
 
                 if (this->clients[client_fd].second.buffer[i] == '\r' || this->clients[client_fd].second.buffer[i] == '\n')
@@ -247,7 +247,7 @@ void Server::parseCmd(int client_fd)
 
     std::string command;
 
-    int commandl;
+    size_t commandl;
     for (commandl = 0; commandl < buffer.size(); commandl++)
     {
 
@@ -260,11 +260,11 @@ void Server::parseCmd(int client_fd)
     else{
 
         clearClientData(client_fd);
-        serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+        serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
         return;
     }
 
-    for (int i = 0; i < command.size(); i++)
+    for (size_t i = 0; i < command.size(); i++)
     {
 
         if (!isalpha(command[i]))
@@ -272,7 +272,7 @@ void Server::parseCmd(int client_fd)
 
             // throw not valid command
             clearClientData(client_fd);
-            serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+            serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
             return;
         }
     }
@@ -339,14 +339,15 @@ void Server::parseCmd(int client_fd)
     if (this->clients[client_fd].second.params.size() > 15)
     {
 
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
 }
 
 void Server::serverResponse(int client_fd, enum status code)
 {
-
+    (void)client_fd;
+    (void)code;
 }
 
 void Server::clearClientData(int client_fd)
@@ -362,7 +363,7 @@ void Server::handleMessage(int client_fd)
 {
     if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
     {
-        serverResponse(client_fd, status::ERR_NOSUCHNICK);
+        serverResponse(client_fd, ERR_NOSUCHNICK);
         clearClientData(client_fd);
         return;
     }
@@ -389,7 +390,7 @@ void Server::handleMessage(int client_fd)
         botCMD(client_fd);
 	else
 	{
-		serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+		serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
 		clearClientData(client_fd);
 		return ;
 	}
@@ -399,14 +400,14 @@ void Server::botCMD(int client_fd){
 
     if (this->clients[client_fd].second.is_pass_set)
     {
-        serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+        serverResponse(client_fd, ERR_ALREADYREGISTRED);
         clearClientData(client_fd);
         return ;
     }
 
     if (this->clients[client_fd].second.params.size() > 1)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         clearClientData(client_fd);
         return ;
     }
@@ -442,7 +443,7 @@ void Server::botCMD(int client_fd){
     }
     else if(this->clients[client_fd].second.params.front() == "time"){
 
-        std::time_t result = std::time(nullptr);
+        std::time_t result = std::time(NULL); // use of nullptr changed to NULL
         if (result == -1 || !std::localtime(&result)){
 
             std::string err = ":irc.server.ma :sorry no time available\r\n";
@@ -452,8 +453,8 @@ void Server::botCMD(int client_fd){
         }
         std::string res = ":irc.server.ma " + this->clients[client_fd].second.nick + " :Current time is ==> ";
         res += std::asctime(std::localtime(&result));
-        if (!res.empty() && res.back() == '\n')
-            res.pop_back();
+        // if (!res.empty() && res.back() == '\n') // C++ 11?
+        //     res.pop_back();
         res += "\r\n";
         send(client_fd, res.c_str(), res.size(), MSG_NOSIGNAL);
         clearClientData(client_fd);
@@ -465,21 +466,21 @@ void Server::passCMD(int client_fd)
 {
     if (this->clients[client_fd].second.is_pass_set)
     {
-        serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+        serverResponse(client_fd, ERR_ALREADYREGISTRED);
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.size() > 1)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.front() != this->serverPass)
     {
-        serverResponse(client_fd, status::ERR_PASSWDMISMATCH);
+        serverResponse(client_fd, ERR_PASSWDMISMATCH);
         clearClientData(client_fd);
         return;
     }
@@ -550,21 +551,21 @@ void Server::nickCMD(int client_fd)
 {
     if (this->clients[client_fd].second.is_pass_set == false)
     {
-        serverResponse(client_fd, status::ERR_PASSWDMISMATCH);
+        serverResponse(client_fd, ERR_PASSWDMISMATCH);
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.size() > 1)
     {
-        serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+        serverResponse(client_fd, ERR_ERRONEUSNICKNAME);
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.empty())
     {
-        serverResponse(client_fd, status::ERR_NONICKNAMEGIVEN);
+        serverResponse(client_fd, ERR_NONICKNAMEGIVEN);
         clearClientData(client_fd);
         return;
     }
@@ -573,7 +574,7 @@ void Server::nickCMD(int client_fd)
     {
         if (this->clients[i].second.nick == this->clients[client_fd].second.params.front())
         {
-            serverResponse(client_fd, status::ERR_NICKNAMEINUSE);
+            serverResponse(client_fd, ERR_NICKNAMEINUSE);
             clearClientData(client_fd);
             return;
         }
@@ -581,7 +582,7 @@ void Server::nickCMD(int client_fd)
 
     if (this->clients[client_fd].second.params.front().size() > 9)
     {
-        serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+        serverResponse(client_fd, ERR_ERRONEUSNICKNAME);
         clearClientData(client_fd);
         return;
     }
@@ -589,7 +590,7 @@ void Server::nickCMD(int client_fd)
     char &c = this->clients[client_fd].second.params.front()[0];
     if (!std::isalpha(c) && std::string("[]\\`_^{|}").find(c) == std::string::npos)
     {
-        serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+        serverResponse(client_fd, ERR_ERRONEUSNICKNAME);
         clearClientData(client_fd);
         return;
     }
@@ -599,7 +600,7 @@ void Server::nickCMD(int client_fd)
         char &c = this->clients[client_fd].second.params.front()[i];
         if (!std::isalnum(c) && std::string("[]\\`_^{|}").find(c) == std::string::npos)
         {
-            serverResponse(client_fd, status::ERR_ERRONEUSNICKNAME);
+            serverResponse(client_fd, ERR_ERRONEUSNICKNAME);
             clearClientData(client_fd);
             return;
         }
@@ -614,28 +615,28 @@ void Server::userCMD(int client_fd)
 {
     if (this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+        serverResponse(client_fd, ERR_ALREADYREGISTRED);
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.size() != 4)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.front().size() > 9)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS); // check
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS); // check
         clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.front().find('@') != std::string::npos)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS); // check
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS); // check
         clearClientData(client_fd);
         return;
     }
@@ -668,13 +669,13 @@ void Server::joinCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED);
         return;
     }
 
     if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.size() > 2)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
 
@@ -746,12 +747,12 @@ void Server::joinCMD(int client_fd)
                 {
                     if (!this->channels[name].password.empty() && this->channels[name].password != keys_vec[i])
                     {
-                        serverResponse(client_fd, status::ERR_BADCHANNELKEY);
+                        serverResponse(client_fd, ERR_BADCHANNELKEY);
                         continue;
                     }
                     else if (this->channels[name].userlimited && this->channels[name].members.size() + this->channels[name].operators.size() == this->channels[name].max_users)
                     {
-                        serverResponse(client_fd, status::ERR_CHANNELISFULL);
+                        serverResponse(client_fd, ERR_CHANNELISFULL);
                     }
                     else if (this->channels[name].invite_only)
                     {
@@ -770,7 +771,7 @@ void Server::joinCMD(int client_fd)
                         }
                         if (!was_able_to_join)
                         {
-                            serverResponse(client_fd, status::ERR_INVITEONLYCHAN);
+                            serverResponse(client_fd, ERR_INVITEONLYCHAN);
                         }
                     }
                     else
@@ -795,7 +796,7 @@ void Server::joinCMD(int client_fd)
         }
         else
         {
-            serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL);
         }
     }
 }
@@ -804,17 +805,17 @@ void Server::privmsgCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED);
         return;
     }
     if (this->clients[client_fd].second.params.empty())
     {
-        serverResponse(client_fd, status::ERR_NORECIPIENT);
+        serverResponse(client_fd, ERR_NORECIPIENT);
         return;
     }
     if (this->clients[client_fd].second.params.size() == 1)
     {
-        serverResponse(client_fd, status::ERR_NOTEXTTOSEND);
+        serverResponse(client_fd, ERR_NOTEXTTOSEND);
         return;
     }
 
@@ -855,21 +856,20 @@ void Server::privmsgCMD(int client_fd)
         }
         if (!sent)
         {
-            serverResponse(client_fd, status::ERR_NOSUCHNICK);
+            serverResponse(client_fd, ERR_NOSUCHNICK);
         }
     }
 
     for (size_t i = 0; i < channels.size(); i++)
     {
         std::string& target = channels[i];
-        bool sent = false;
         if (this->channels.count(channels[i]) > 0)
         {
             this->channels[target].broadcastToAll(this->clients, client_fd, message);
         }
         else
         {
-            serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL);
         }
     }
 }
@@ -878,12 +878,12 @@ void Server::kickCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED);
         return;
     }
     if (this->clients[client_fd].second.params.size() < 2)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
 
@@ -892,7 +892,7 @@ void Server::kickCMD(int client_fd)
     
     if (this->channels.count(channel) == 0)
     {
-        serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
         return;
     }
     
@@ -907,7 +907,7 @@ void Server::kickCMD(int client_fd)
     }
     if (!IsOperator)
     {
-        serverResponse(client_fd, status::ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
         return;
     }
 
@@ -922,7 +922,7 @@ void Server::kickCMD(int client_fd)
     }
     if (!isMember)
     {
-        serverResponse(client_fd, status::ERR_NOTONCHANNEL);
+        serverResponse(client_fd, ERR_NOTONCHANNEL);
         return;
     }
     
@@ -955,12 +955,12 @@ void Server::inviteCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED);
         return;
     }
     if (this->clients[client_fd].second.params.size() < 2)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
 
@@ -978,13 +978,13 @@ void Server::inviteCMD(int client_fd)
     }
     if (!nickExists)
     {
-        serverResponse(client_fd, status::ERR_NOSUCHNICK);
+        serverResponse(client_fd, ERR_NOSUCHNICK);
         return;
     }
 
     if (this->channels.count(channel) == 0)
     {
-        serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
         return;
     }
 
@@ -999,7 +999,7 @@ void Server::inviteCMD(int client_fd)
     }
     if (!IsOperator)
     {
-        serverResponse(client_fd, status::ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
         return;
     }
 
@@ -1028,7 +1028,7 @@ void Server::inviteCMD(int client_fd)
     }
     if (already)
     {
-        serverResponse(client_fd, status::ERR_USERONCHANNEL);
+        serverResponse(client_fd, ERR_USERONCHANNEL);
         return;
     }
     if (this->channels[channel].invite_only)
@@ -1042,17 +1042,17 @@ void Server::topicCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED);
         return;
     }
     if (this->clients[client_fd].second.params.size() < 1)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
     if (this->channels.count(this->clients[client_fd].second.params.front()) == 0 || !validChanName(this->clients[client_fd].second.params.front()))
     {
-        serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
         return;
     }
 
@@ -1068,7 +1068,7 @@ void Server::topicCMD(int client_fd)
     }
     if (!IsOperator)
     {
-        serverResponse(client_fd, status::ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
         return;
     }
 
@@ -1088,19 +1088,19 @@ void Server::modeCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, status::ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED);
         return;
     }
 
     if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.size() < 2)
     {
-        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
 
     if (this->channels.count(this->clients[client_fd].second.params.front()) == 0 || !validChanName(this->clients[client_fd].second.params.front()))
     {
-        serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
         return;
     }
 
@@ -1115,7 +1115,7 @@ void Server::modeCMD(int client_fd)
 
     if (!IsOperator)
     {
-        serverResponse(client_fd, status::ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
         return;
     }
 
@@ -1139,7 +1139,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() != 3)
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
         this->channels[this->clients[client_fd].second.params.front()].password = this->clients[client_fd].second.params.back();
@@ -1148,7 +1148,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() != 3)
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
         if (this->channels[this->clients[client_fd].second.params.front()].password == this->clients[client_fd].second.params.back())
@@ -1160,7 +1160,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
         std::string chan_name = this->clients[client_fd].second.params[0];
@@ -1183,7 +1183,7 @@ void Server::modeCMD(int client_fd)
         }
         if (!nickInChan && !isOper)
         {
-            serverResponse(client_fd, status::ERR_USERNOTINCHANNEL);
+            serverResponse(client_fd, ERR_USERNOTINCHANNEL);
             return;
         }
         else if (!isOper)
@@ -1197,7 +1197,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
         std::string chan_name = this->clients[client_fd].second.params[0];
@@ -1227,7 +1227,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
         size_t limit;
@@ -1236,14 +1236,14 @@ void Server::modeCMD(int client_fd)
         ss >> limit;
         if (!ss.eof() || ss.fail())
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
 
         std::string chan_name = this->clients[client_fd].second.params[0];
         if (this->channels.count(chan_name) == 0)
         {
-            serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL);
             return;
         }
 
@@ -1254,20 +1254,20 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 2)
         {
-            serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
             return;
         }
 
         std::string chan_name = this->clients[client_fd].second.params[0];
         if (this->channels.count(chan_name) == 0)
         {
-            serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL);
             return;
         }
         this->channels[chan_name].userlimited = false;
     }
     else
     {
-        serverResponse(client_fd, status::ERR_UNKNOWNMODE);
+        serverResponse(client_fd, ERR_UNKNOWNMODE);
     }
 }
