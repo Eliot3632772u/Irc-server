@@ -356,12 +356,80 @@ void Server::handleMessage(int client_fd)
         topicCMD(client_fd);
 	else if (this->clients[client_fd].second.command == "MODE")
         modeCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "BOT")
+        botCMD(client_fd);
 	else
 	{
 		serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
 		clearClientData(client_fd);
 		return ;
 	}
+}
+
+void Server::botCMD(int client_fd){
+
+    if (this->clients[client_fd].second.is_pass_set)
+    {
+        serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+        clearClientData(client_fd);
+        return ;
+    }
+
+    if (this->clients[client_fd].second.params.size() > 1)
+    {
+        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        clearClientData(client_fd);
+        return ;
+    }
+
+    if (this->clients[client_fd].second.params.front() == "help"){
+
+        std::string help_message =
+            GREEN ":irc.server.ma Available commands:\n" RESET
+            "\n"
+            BLUE "1. PASS <password>\n" RESET
+            "\n"
+            BLUE "2. NICK <nickname>\n" RESET
+            "\n"
+            BLUE "3. USER <username> <hostname> <servername> :<realname>\n" RESET
+            "\n"
+            BLUE "4. JOIN <#channel>\n" RESET
+            "\n"
+            BLUE "5. PRIVMSG <target> :<message>\n"
+            "\n"
+            BLUE "6. KICK <#channel> <user> [:reason]\n" RESET
+            "\n"
+            BLUE "7. INVITE <nickname> <#channel>\n" RESET
+            "\n"
+            BLUE "8. TOPIC <#channel> [:new topic]\n" RESET
+            "\n"
+            BLUE "9. MODE <#channel> <flags> [params]\n" RESET
+            "\n"
+            BLUE "10. BOT {help | time}\n" RESET;
+
+        send(client_fd, help_message.c_str(), help_message.size(), MSG_NOSIGNAL);
+        clearClientData(client_fd);
+        return;
+    }
+    else if(this->clients[client_fd].second.params.front() == "time"){
+
+        std::time_t result = std::time(nullptr);
+        if (result == -1 || !std::localtime(&result)){
+
+            std::string err = ":irc.server.ma :sorry no time available\r\n";
+            send(client_fd, err.c_str(), err.size(), MSG_NOSIGNAL);
+            clearClientData(client_fd);
+            return;
+        }
+        std::string res = ":irc.server.ma " + this->clients[client_fd].second.nick + " :Current time is ==> ";
+        res += std::asctime(std::localtime(&result));
+        if (!res.empty() && res.back() == '\n')
+            res.pop_back();
+        res += "\r\n";
+        send(client_fd, res.c_str(), res.size(), MSG_NOSIGNAL);
+        clearClientData(client_fd);
+        return;
+    }
 }
 
 void Server::passCMD(int client_fd)

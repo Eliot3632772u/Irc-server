@@ -50,4 +50,5 @@ struct Server
     void inviteCMD(int client_fd);
     void topicCMD(int client_fd);
     void modeCMD(int client_fd);
+    void botCMD(int client_fd);
 };
