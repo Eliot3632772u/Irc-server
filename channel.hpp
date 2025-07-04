@@ -2,24 +2,16 @@
 
 #include "inc.hpp"
 
-struct Channel{
-
-    // channel name
-    // password
-    // topic
-    // members
-    // operators
-    // userlimit
-    // invite only channel
-    // invited users
+struct Channel
+{
+    bool invite_only;
+    bool userlimited;
+    size_t max_users;
     std::string name;
-    std::string password;
     std::string topic;
+    std::string password;
     std::vector<std::string> members;
     std::vector<std::string> operators;
     std::vector<std::string> invited_users;
     std::vector<std::string> ban_list;
-    int userlimit;
-    bool is_invite_only;
-
 };

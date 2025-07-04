@@ -13,6 +13,5 @@ struct Client
     std::string prefix;
     std::string command;
     std::vector<std::string> channels;
-
     std::vector<std::string> params;
 };

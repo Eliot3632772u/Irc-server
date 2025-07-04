@@ -19,6 +19,11 @@ enum status
     ERR_NONICKNAMEGIVEN = 431,
     ERR_ERRONEUSNICKNAME = 432,
     ERR_NICKNAMEINUSE = 433,
+
+    ERR_NOTREGISTERED = 451,
+    ERR_NOSUCHCHANNEL = 403,
+    ERR_CHANNELISFULL = 471,
+    ERR_INVITEONLYCHAN = 473,
 };
 
 struct Server
@@ -32,12 +37,13 @@ struct Server
     std::map<std::string, Channel> channels;
 
     Server(std::string serverPass, std::string serverPort);
+
     void initSocket();
     void creatEpoll();
     void acceptConnections();
     void readReq(int client_fd);
     void parseCmd(int client_fd);
-    void serverResponse(int cliet_fd, enum status);
+    void serverResponse(int cliet_fd, enum status code);
     void clearClientData(int client_fd);
     void handleMessage(int client_fd);
 
