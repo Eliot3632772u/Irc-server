@@ -215,7 +215,8 @@ void Server::readReq(int client_fd)
 void Server::parseCmd(int client_fd)
 {
 
-    std::string buffer = this->clients[client_fd].second.buffer;
+    size_t last = this->clients[client_fd].second.buffer.size() - 3;
+    std::string buffer =  this->clients[client_fd].second.buffer.substr(0, last);
 
     if (buffer[0] == ':')
     {
@@ -230,21 +231,13 @@ void Server::parseCmd(int client_fd)
                 break;
         }
 
-        prefix = buffer.substr(0, prefixl - 1);
+        prefix = buffer.substr(0, prefixl);
 
-        int pos;
-        for (int i = 0; i < prefix.size(); i++)
-        {
+        size_t nick_end = prefix.find_first_of("!@");
+        if (nick_end == std::string::npos)
+            nick_end = prefix.size();
 
-            if (prefix[i] == '!' || prefix[i] == '@')
-            {
-
-                pos = i;
-                break;
-            }
-        }
-
-        this->clients[client_fd].second.prefix = prefix.substr(1, pos - 1);
+        this->clients[client_fd].second.prefix = prefix.substr(1, nick_end - 1);
 
         if (prefixl + 1 < buffer.size())
             buffer = buffer.substr(prefixl + 1);
@@ -263,9 +256,8 @@ void Server::parseCmd(int client_fd)
     }
 
     if (commandl > 0)
-        command = buffer.substr(0, commandl - 1);
-    else
-    {
+        command = buffer.substr(0, commandl);
+    else{
 
         clearClientData(client_fd);
         serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
@@ -309,16 +301,28 @@ void Server::parseCmd(int client_fd)
 
             this->clients[client_fd].second.buffer.clear();
             // respond to message
-            // handle message
-            return;
+            return ;
         }
 
-        param = buffer.substr(0, pos - 1);
-
-        if (pos + 1 < buffer.size())
-            buffer = buffer.substr(pos + 1);
+        buffer = buffer.substr(pos);
+        
+        if (buffer[0] != ':'){
+            
+           for(pos = 0; pos < buffer.size(); pos++){
+            
+                if (buffer[pos] == ' ')
+                    break;
+            }
+        
+            param = buffer.substr(0, pos);
+        
+            if (pos + 1 < buffer.size())
+                buffer = buffer.substr(pos + 1);
+            else
+                buffer = ""; 
+        }
         else
-            buffer = "";
+            param = buffer;
 
         if (param[0] == ':')
         {
@@ -381,9 +385,77 @@ void Server::handleMessage(int client_fd)
         topicCMD(client_fd);
     else if (this->clients[client_fd].second.command == "MODE")
         modeCMD(client_fd);
-    else
+    else if (this->clients[client_fd].second.command == "BOT")
+        botCMD(client_fd);
+	else
+	{
+		serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+		clearClientData(client_fd);
+		return ;
+	}
+}
+
+void Server::botCMD(int client_fd){
+
+    if (this->clients[client_fd].second.is_pass_set)
     {
-        serverResponse(client_fd, status::ERR_UNKNOWNCOMMAND);
+        serverResponse(client_fd, status::ERR_ALREADYREGISTRED);
+        clearClientData(client_fd);
+        return ;
+    }
+
+    if (this->clients[client_fd].second.params.size() > 1)
+    {
+        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        clearClientData(client_fd);
+        return ;
+    }
+
+    if (this->clients[client_fd].second.params.front() == "help"){
+
+        std::string help_message =
+            GREEN ":irc.server.ma Available commands:\n" RESET
+            "\n"
+            BLUE "1. PASS <password>\n" RESET
+            "\n"
+            BLUE "2. NICK <nickname>\n" RESET
+            "\n"
+            BLUE "3. USER <username> <hostname> <servername> :<realname>\n" RESET
+            "\n"
+            BLUE "4. JOIN <#channel>\n" RESET
+            "\n"
+            BLUE "5. PRIVMSG <target> :<message>\n"
+            "\n"
+            BLUE "6. KICK <#channel> <user> [:reason]\n" RESET
+            "\n"
+            BLUE "7. INVITE <nickname> <#channel>\n" RESET
+            "\n"
+            BLUE "8. TOPIC <#channel> [:new topic]\n" RESET
+            "\n"
+            BLUE "9. MODE <#channel> <flags> [params]\n" RESET
+            "\n"
+            BLUE "10. BOT {help | time}" RESET "\r\n";
+
+        send(client_fd, help_message.c_str(), help_message.size(), MSG_NOSIGNAL);
+        clearClientData(client_fd);
+        return;
+    }
+    else if(this->clients[client_fd].second.params.front() == "time"){
+
+        std::time_t result = std::time(nullptr);
+        if (result == -1 || !std::localtime(&result)){
+
+            std::string err = ":irc.server.ma :sorry no time available\r\n";
+            send(client_fd, err.c_str(), err.size(), MSG_NOSIGNAL);
+            clearClientData(client_fd);
+            return;
+        }
+        std::string res = ":irc.server.ma " + this->clients[client_fd].second.nick + " :Current time is ==> ";
+        res += std::asctime(std::localtime(&result));
+        if (!res.empty() && res.back() == '\n')
+            res.pop_back();
+        res += "\r\n";
+        send(client_fd, res.c_str(), res.size(), MSG_NOSIGNAL);
         clearClientData(client_fd);
         return;
     }
