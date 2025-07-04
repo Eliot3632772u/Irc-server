@@ -197,7 +197,8 @@ void Server::readReq(int client_fd){
 
 void Server::parseCmd(int client_fd){
 
-    std::string buffer =  this->clients[client_fd].second.buffer;
+    size_t last = this->clients[client_fd].second.buffer.size() - 3;
+    std::string buffer =  this->clients[client_fd].second.buffer.substr(0, last);
 
     if (buffer[0] == ':'){
 
@@ -210,19 +211,13 @@ void Server::parseCmd(int client_fd){
                 break;
         }
 
-        prefix = buffer.substr(0, prefixl - 1);
+        prefix = buffer.substr(0, prefixl);
 
-        int pos;
-        for (int i = 0; i < prefix.size(); i++){
+        size_t nick_end = prefix.find_first_of("!@");
+        if (nick_end == std::string::npos)
+            nick_end = prefix.size();
 
-            if (prefix[i] == '!' || prefix[i] == '@'){
-
-                pos = i;
-                break;
-            }
-        }
-
-        this->clients[client_fd].second.prefix = prefix.substr(1, pos - 1);
+        this->clients[client_fd].second.prefix = prefix.substr(1, nick_end - 1);
 
         if (prefixl + 1 < buffer.size())
             buffer = buffer.substr(prefixl + 1);
@@ -240,7 +235,7 @@ void Server::parseCmd(int client_fd){
     }
 
     if (commandl > 0)
-        command = buffer.substr(0, commandl - 1);
+        command = buffer.substr(0, commandl);
     else{
 
         clearClientData(client_fd);
@@ -280,16 +275,28 @@ void Server::parseCmd(int client_fd){
 
             this->clients[client_fd].second.buffer.clear();
             // respond to message
-            // handle message
             return ;
         }
 
-        param = buffer.substr(0, pos - 1);
-
-        if (pos + 1 < buffer.size())
-            buffer = buffer.substr(pos + 1);
+        buffer = buffer.substr(pos);
+        
+        if (buffer[0] != ':'){
+            
+           for(pos = 0; pos < buffer.size(); pos++){
+            
+                if (buffer[pos] == ' ')
+                    break;
+            }
+        
+            param = buffer.substr(0, pos);
+        
+            if (pos + 1 < buffer.size())
+                buffer = buffer.substr(pos + 1);
+            else
+                buffer = ""; 
+        }
         else
-            buffer = "";
+            param = buffer;
 
         if (param[0] == ':'){
 
