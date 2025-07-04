@@ -600,11 +600,11 @@ void Server::joinCMD(int client_fd)
         return;
     }
 
-    // if (this->clients[client_fd].second.params.size() != 1) // shouldn't be since we have keys as well
-    // {
-    //     serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
-    //     return;
-    // }
+    if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.size() > 2)
+    {
+        serverResponse(client_fd, status::ERR_NEEDMOREPARAMS);
+        return;
+    }
 
     if (this->clients[client_fd].second.params.size() == 1 && this->clients[client_fd].second.params[0] == "0")
     {
@@ -639,40 +639,59 @@ void Server::joinCMD(int client_fd)
     }
 
 
-    std::stringstream ssArgs(this->clients[client_fd].second.params.front()); // did not take into account keys 
-    std::string channels;
-    std::string keys;
+    std::string channels = this->clients[client_fd].second.params[0];
+    std::string keys = (this->clients[client_fd].second.params.size() > 1) ? this->clients[client_fd].second.params[1] : "";
     
-    std::getline(ssArgs, channels, ' ');
-    if (this->clients[client_fd].second.params.size() > 1)
-        std::getline(ssArgs, keys);
+    std::stringstream ssChans(channels);
+    std::stringstream ssKeys(keys);
 
-    std::stringstream ssChans;
-    std::string chan_name;
+    std::string key;
+    std::string chan;
+    std::vector<std::string> keys_vec;
+    std::vector<std::string> chans_vec;
 
-    while (std::getline(ssChans, chan_name, ','));
+    while (std::getline(ssChans, chan, ','))
     {
-        if (validChanName(chan_name))
+        chans_vec.push_back(chan);
+        if (std::getline(ssKeys, key, ','))
         {
-            if (this->channels.count(chan_name) > 0) // channel exits need to check further checks 
+            keys_vec.push_back(key);
+        }
+        else
+        {
+            keys_vec.push_back("");
+        }
+    }
+
+    for (size_t i = 0; i < chans_vec.size(); i++)
+    {
+        std::string name = chans_vec[i];
+        if (validChanName(name))
+        {
+            if (this->channels.count(name) > 0) // channel exits need to check further checks 
             {
-                if (std::find(this->clients[client_fd].second.channels.begin(), this->clients[client_fd].second.channels.end(), chan_name) == this->clients[client_fd].second.channels.end())
+                if (std::find(this->clients[client_fd].second.channels.begin(), this->clients[client_fd].second.channels.end(), name) == this->clients[client_fd].second.channels.end())
                 {
-                    if (this->channels[chan_name].userlimited && this->channels[chan_name].members.size() + this->channels[chan_name].operators.size() == this->channels[chan_name].max_users)
+                    if (!this->channels[name].password.empty() && this->channels[name].password != keys_vec[i])
+                    {
+                        serverResponse(client_fd, status::ERR_BADCHANNELKEY);
+                        continue;
+                    }
+                    else if (this->channels[name].userlimited && this->channels[name].members.size() + this->channels[name].operators.size() == this->channels[name].max_users)
                     {
                         serverResponse(client_fd, status::ERR_CHANNELISFULL);
                     }
-                    else if (this->channels[chan_name].invite_only)
+                    else if (this->channels[name].invite_only)
                     {
                         bool was_able_to_join = false;
-                        for (size_t i = 0; i < this->channels[chan_name].invited_users.size(); i++)
+                        for (size_t i = 0; i < this->channels[name].invited_users.size(); i++)
                         {
-                            if (areEqualScandi(this->channels[chan_name].invited_users[i], this->clients[client_fd].second.nick))
+                            if (areEqualScandi(this->channels[name].invited_users[i], this->clients[client_fd].second.nick))
                             {
                                 // send some message to other clients in channel and client that joined
-                                this->channels[chan_name].invited_users.erase(this->channels[chan_name].invited_users.begin() + i);
-                                this->channels[chan_name].members.push_back(this->clients[client_fd].second.nick);
-                                this->clients[client_fd].second.channels.push_back(chan_name);
+                                this->channels[name].invited_users.erase(this->channels[name].invited_users.begin() + i);
+                                this->channels[name].members.push_back(this->clients[client_fd].second.nick);
+                                this->clients[client_fd].second.channels.push_back(name);
                                 was_able_to_join = true;
                                 break;
                             }
@@ -684,20 +703,21 @@ void Server::joinCMD(int client_fd)
                     }
                     else
                     {
-                        this->channels[chan_name].members.push_back(this->clients[client_fd].second.nick);
-                        this->clients[client_fd].second.channels.push_back(chan_name);
+                        this->channels[name].members.push_back(this->clients[client_fd].second.nick);
+                        this->clients[client_fd].second.channels.push_back(name);
+                        // send join message
                     }
                 }
             }
             else // channel does not exist nned to create it and set client as operator for it.
             {
                 Channel new_chan;
-                new_chan.name = chan_name;
+                new_chan.name = name;
 
-                this->clients[client_fd].second.channels.push_back(chan_name);
+                this->clients[client_fd].second.channels.push_back(name);
 
                 new_chan.operators.push_back(this->clients[client_fd].second.nick);
-                this->channels[chan_name] = new_chan;
+                this->channels[name] = new_chan;
                 // inform other users but what other users there is none !
             }
         }
@@ -706,12 +726,11 @@ void Server::joinCMD(int client_fd)
             serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
         }
     }
-
-    serverResponse(client_fd, status::ERR_NOSUCHCHANNEL);
 }
 
 void Server::privmsgCMD(int client_fd)
 {
+    
 }
 
 void Server::kickCMD(int client_fd)
