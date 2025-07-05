@@ -178,7 +178,7 @@ void Server::readReq(int client_fd)
     {
 
         this->clients[client_fd].second.buffer.erase();
-        serverResponse(client_fd, ERR_INPUTTOOLONG);
+        serverResponse(client_fd, ERR_UNKNOWNCOMMAND, "INTPUTTOOLONG "); // here changed it from INPUTTOOLONG
         return;
     }
 
@@ -204,7 +204,8 @@ void Server::readReq(int client_fd)
             for (size_t i = 0; i < this->clients[client_fd].second.buffer.size(); i++)
             {
 
-                if (this->clients[client_fd].second.buffer[i] == '\r' || this->clients[client_fd].second.buffer[i] == '\0' || this->clients[client_fd].second.buffer[i] == '\n')
+                // if (this->clients[client_fd].second.buffer[i] == '\r' || this->clients[client_fd].second.buffer[i] == '\0' || this->clients[client_fd].second.buffer[i] == '\n')
+                if (this->clients[client_fd].second.buffer[i] < 32 || this->clients[client_fd].second.buffer[i] > 126)
                 {
                     std::cout << "stop" << std::endl;
                     this->clients[client_fd].second.buffer.clear();
@@ -267,7 +268,7 @@ void Server::parseCmd(int client_fd)
 
         
         clearClientData(client_fd);
-        serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
+        serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
         return;
     }
     
@@ -277,7 +278,7 @@ void Server::parseCmd(int client_fd)
         if (!isalpha(command[i]))
         {
             clearClientData(client_fd);
-            serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
+            serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
             return;
         }
     }
@@ -344,7 +345,7 @@ void Server::parseCmd(int client_fd)
     if (this->clients[client_fd].second.params.size() > 15 || this->clients[client_fd].second.params.size() == 0)
     {
 
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS, command + " ");
         return;
     }
 
@@ -459,7 +460,7 @@ void Server::botCMD(int client_fd){
         std::string res = ":irc.server.ma " + this->clients[client_fd].second.nick + " :Current time is ==> ";
         res += std::asctime(std::localtime(&result));
         if (!res.empty() && res[res.size() - 1] == '\n')
-            res.pop_back();
+            res.erase(res.size() - 1);
         res += "\r\n";
         send(client_fd, res.c_str(), res.size(), MSG_NOSIGNAL);
         clearClientData(client_fd);
@@ -756,6 +757,7 @@ void Server::joinCMD(int client_fd)
             {
                 if (std::find(this->clients[client_fd].second.channels.begin(), this->clients[client_fd].second.channels.end(), name) == this->clients[client_fd].second.channels.end())
                 {
+                    std::cout << "boolean: --------------------------------------------" << this->channels[name].invite_only << std::endl;
                     if (!this->channels[name].password.empty() && this->channels[name].password != keys_vec[i])
                     {
                         serverResponse(client_fd, ERR_BADCHANNELKEY, name + " ");
@@ -782,6 +784,7 @@ void Server::joinCMD(int client_fd)
                         }
                         if (!was_able_to_join)
                         {
+                            std::cout << "=-------------------------------------------------------" << std::endl;
                             serverResponse(client_fd, ERR_INVITEONLYCHAN, name + " ");
                         }
                     }
@@ -821,7 +824,7 @@ void Server::privmsgCMD(int client_fd)
     }
     if (this->clients[client_fd].second.params.empty())
     {
-        serverResponse(client_fd, ERR_NORECIPIENT, ":No recipient given PRIVMSG");
+        serverResponse(client_fd, ERR_NORECIPIENT, "411 :No recipient given PRIVMSG");
         return;
     }
     if (this->clients[client_fd].second.params.size() == 1)
@@ -1097,48 +1100,49 @@ void Server::topicCMD(int client_fd)
 
 void Server::serverResponse(int client_fd, enum status code, std::string msg)
 {
+    msg.insert(0, RED ":irc.server.ma ");
     if (ERR_ERRONEUSNICKNAME == code)
-        msg += ":Erroneous nickname\r\n";
+        msg += "432 :Erroneous nickname\r\n" RESET;
     else if (ERR_UNKNOWNCOMMAND == code)
-        msg += ":Unknown command\r\n";
+        msg += "421 :Unknown command\r\n" RESET;
     else if (ERR_NOSUCHNICK == code)
-        msg += ":No such nick/channel\r\n";
+        msg += "401 :No such nick/channel\r\n" RESET;
     else if (ERR_ALREADYREGISTRED == code)
-        msg += ":Unauthorized command (already registered)\r\n";
+        msg += "462 :Unauthorized command (already registered)\r\n" RESET;
     else if (ERR_NEEDMOREPARAMS == code)
-        msg += ":Not enough parameters\r\n";
+        msg += "461 :Not enough parameters\r\n" RESET;
     else if (ERR_PASSWDMISMATCH == code)
-        msg += ":Password incorrect\r\n";
+        msg += "464 :Password incorrect\r\n" RESET;
     else if (ERR_NOTREGISTERED == code)
-        msg += ":You have not registered\r\n";
+        msg += "451 :You have not registered\r\n" RESET;
     else if (ERR_ERRONEUSNICKNAME == code)
-        msg += ":Erroneous nickname\r\n";
+        msg += "432 :Erroneous nickname\r\n" RESET;
     else if (ERR_NONICKNAMEGIVEN == code)
-        msg += ":No nickname given\r\n";
+        msg += "431 :No nickname given\r\n" RESET;
     else if (ERR_NICKNAMEINUSE == code)
-        msg += ":Nickname is already in use\r\n";
+        msg += "433 :Nickname is already in use\r\n" RESET;
     else if (ERR_BADCHANNELKEY == code)
-        msg += ":Cannot join channel (+k)\r\n";
+        msg += "475 :Cannot join channel (+k)\r\n" RESET;
     else if (ERR_INVITEONLYCHAN == code)
-        msg += ":Cannot join channel (+i)\r\n";
+        msg += "473 :Cannot join channel (+i)\r\n" RESET;
     else if (ERR_CHANNELISFULL == code)
-        msg += ":Cannot join channel (+l)\r\n";
+        msg += "471 :Cannot join channel (+l)\r\n" RESET;
     else if (ERR_NOSUCHCHANNEL == code)
-        msg += ":No such channel\r\n";
+        msg += "403 :No such channel\r\n" RESET;
     else if (ERR_NORECIPIENT == code)
-        msg += "\r\n";
+        msg += "\r\n" RESET;
     else if (ERR_NOTEXTTOSEND == code)
-        msg += ":No text to send\r\n";
+        msg += "412 :No text to send\r\n" RESET;
     else if (ERR_CHANOPRIVSNEEDED == code)
-        msg += ":You're not channel operator\r\n";
+        msg += "482 :You're not channel operator\r\n" RESET;
     else if (ERR_NOTONCHANNEL == code)
-        msg += ":You're not on that channel\r\n"
+        msg += "442 :You're not on that channel\r\n" RESET;
     else if (ERR_USERONCHANNEL == code)
-        msg += ":is already on channel\r\n";
+        msg += "443 :is already on channel\r\n" RESET;
     else if (ERR_USERNOTINCHANNEL == code)
-        msg += ":They aren't on that channel\r\n";
+        msg += "441 :They aren't on that channel\r\n" RESET;
     else if (ERR_UNKNOWNMODE == code)
-        msg += "\r\n";
+        msg += "\r\n" RESET;
     
     send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
@@ -1330,6 +1334,6 @@ void Server::modeCMD(int client_fd)
         char buf[2] = {0};
         buf[1] = this->clients[client_fd].second.params[1][1];
         std::string mode = buf;
-        serverResponse(client_fd, ERR_UNKNOWNMODE, mode + " :is unknown mode char to me for " + this->clients[client_fd].second.params[1]);
+        serverResponse(client_fd, ERR_UNKNOWNMODE, mode + " 472 :is unknown mode char to me for " + this->clients[client_fd].second.params[1]);
     }
 }

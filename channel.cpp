@@ -29,11 +29,19 @@ void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& clients, in
 	std::map<int, std::pair<int, Client> >::iterator it = clients.begin();
 	while (it != clients.end())
 	{
+		std::cout << "SEND LOOP" << std::endl;
 		if (except != it->second.second.client_fd && isAnyMember(it->second.second.nick))
 		{
-			char* buffer = new char[message.size() + 1];
-			std::strcpy(buffer, message.c_str());
-			send(it->second.second.client_fd, buffer, message.size(), MSG_NOSIGNAL); // check failure
+			std::cout << "Tried to send to " << it->second.second.nick << std::endl;
+			message += "\r\n";
+			send(it->second.second.client_fd, message.c_str(), message.size(), MSG_NOSIGNAL); // check failure
 		}
 	}
+}
+
+Channel::Channel(){
+
+	this->invite_only = false;
+	this->userlimited = false;
+	this->topic_restricted = false;
 }

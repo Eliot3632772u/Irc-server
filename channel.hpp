@@ -16,6 +16,8 @@ struct Channel
     std::vector<std::string> operators;
     std::vector<std::string> invited_users;
 
+    Channel();
+
     bool isAnyMember(const std::string& nick) const; // check is memebrs and operators
     // is operator to make code cleaner
     // is invited 
