@@ -1135,7 +1135,10 @@ void Server::serverResponse(int client_fd, enum status code, std::string msg)
         msg += ":You're not on that channel\r\n"
     else if (ERR_USERONCHANNEL == code)
         msg += ":is already on channel\r\n";
-    else if (
+    else if (ERR_USERNOTINCHANNEL == code)
+        msg += ":They aren't on that channel\r\n";
+    else if (ERR_UNKNOWNMODE == code)
+        msg += "\r\n";
     
     send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
@@ -1144,19 +1147,19 @@ void Server::modeCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED, "");
         return;
     }
 
-    if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.size() < 2)
+    if (this->clients[client_fd].second.params.size() < 2)
     {
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
         return;
     }
 
     if (this->channels.count(this->clients[client_fd].second.params.front()) == 0 || !validChanName(this->clients[client_fd].second.params.front()))
     {
-        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL, this->clients[client_fd].second.params.front());
         return;
     }
 
@@ -1171,7 +1174,7 @@ void Server::modeCMD(int client_fd)
 
     if (!IsOperator)
     {
-        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED, this->clients[client_fd].second.nick + " ");
         return;
     }
 
@@ -1195,7 +1198,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() != 3)
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
         this->channels[this->clients[client_fd].second.params.front()].password = this->clients[client_fd].second.params.back();
@@ -1204,7 +1207,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() != 3)
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
         if (this->channels[this->clients[client_fd].second.params.front()].password == this->clients[client_fd].second.params.back())
@@ -1216,7 +1219,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
         std::string chan_name = this->clients[client_fd].second.params[0];
@@ -1239,7 +1242,7 @@ void Server::modeCMD(int client_fd)
         }
         if (!nickInChan && !isOper)
         {
-            serverResponse(client_fd, ERR_USERNOTINCHANNEL);
+            serverResponse(client_fd, ERR_USERNOTINCHANNEL, nick + " " + chan_name + " ");
             return;
         }
         else if (!isOper)
@@ -1253,7 +1256,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
         std::string chan_name = this->clients[client_fd].second.params[0];
@@ -1283,7 +1286,7 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
         size_t limit;
@@ -1292,14 +1295,14 @@ void Server::modeCMD(int client_fd)
         ss >> limit;
         if (!ss.eof() || ss.fail())
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
 
         std::string chan_name = this->clients[client_fd].second.params[0];
         if (this->channels.count(chan_name) == 0)
         {
-            serverResponse(client_fd, ERR_NOSUCHCHANNEL);
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL, chan_name + " ");
             return;
         }
 
@@ -1310,20 +1313,23 @@ void Server::modeCMD(int client_fd)
     {
         if (this->clients[client_fd].second.params.size() < 2)
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
 
         std::string chan_name = this->clients[client_fd].second.params[0];
         if (this->channels.count(chan_name) == 0)
         {
-            serverResponse(client_fd, ERR_NOSUCHCHANNEL);
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL, chan_name + " ");
             return;
         }
         this->channels[chan_name].userlimited = false;
     }
     else
     {
-        serverResponse(client_fd, ERR_UNKNOWNMODE);
+        char buf[2] = {0};
+        buf[1] = this->clients[client_fd].second.params[1][1];
+        std::string mode = buf;
+        serverResponse(client_fd, ERR_UNKNOWNMODE, mode + " :is unknown mode char to me for " + this->clients[client_fd].second.params[1]);
     }
 }
