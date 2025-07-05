@@ -162,6 +162,7 @@ void Server::readReq(int client_fd)
         return;
     }
 
+    
     if (read_bytes == 0)
     {
         // delete_client
@@ -177,8 +178,7 @@ void Server::readReq(int client_fd)
     {
 
         this->clients[client_fd].second.buffer.erase();
-        // throw message too long
-        serverResponse(client_fd, ERR_INPUTTOOLONG); // check
+        serverResponse(client_fd, ERR_INPUTTOOLONG);
         return;
     }
 
@@ -196,8 +196,9 @@ void Server::readReq(int client_fd)
                 this->clients[client_fd].second.buffer.erase();
                 return;
             }
-            // parse message
-            size_t last = this->clients[client_fd].second.buffer.size() - 3;
+
+            // check if there is /r /n in message
+            size_t last = this->clients[client_fd].second.buffer.size() - 2;
             this->clients[client_fd].second.buffer = this->clients[client_fd].second.buffer.substr(0, last);
 
             for (size_t i = 0; i < this->clients[client_fd].second.buffer.size(); i++)
@@ -205,7 +206,7 @@ void Server::readReq(int client_fd)
 
                 if (this->clients[client_fd].second.buffer[i] == '\r' || this->clients[client_fd].second.buffer[i] == '\n')
                 {
-
+                    std::cout << "stop" << std::endl;
                     this->clients[client_fd].second.buffer.clear();
                     return;
                 }
@@ -220,9 +221,9 @@ void Server::readReq(int client_fd)
 
 void Server::parseCmd(int client_fd)
 {
-    size_t last = this->clients[client_fd].second.buffer.size() - 3;
-    std::string buffer =  this->clients[client_fd].second.buffer.substr(0, last);
+    std::string buffer =  this->clients[client_fd].second.buffer;
 
+    std::cout << buffer << std::endl;
     if (buffer[0] == ':')
     {
 
@@ -275,8 +276,6 @@ void Server::parseCmd(int client_fd)
         
         if (!isalpha(command[i]))
         {
-            
-            // throw not valid command
             clearClientData(client_fd);
             serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
             return;
@@ -285,12 +284,12 @@ void Server::parseCmd(int client_fd)
     
     this->clients[client_fd].second.command = command;
     
-    if (commandl + 1 < buffer.size())
-    buffer = buffer.substr(commandl + 1);
+    if (commandl + 1 < buffer.size()){
+
+        buffer = buffer.substr(commandl + 1);
+    }
     else
     {
-        
-        std::cout << "wslat hansnanananananananan" << std::endl;
         this->clients[client_fd].second.buffer.clear();
         // no parameters error
         return;
@@ -305,10 +304,7 @@ void Server::parseCmd(int client_fd)
 
         if (pos == std::string::npos)
         {
-
             this->clients[client_fd].second.buffer.clear();
-            // respond to message
-            // return ;
             break;
         }
 
@@ -337,8 +333,6 @@ void Server::parseCmd(int client_fd)
 
             this->clients[client_fd].second.params.push_back(param.substr(1));
             this->clients[client_fd].second.buffer.clear();
-            // responde to message
-            // return;
             break;
         }
 
@@ -351,6 +345,7 @@ void Server::parseCmd(int client_fd)
         serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
+
     handleMessage(client_fd);
 }
 
@@ -497,6 +492,8 @@ void Server::passCMD(int client_fd)
         clearClientData(client_fd);
         return;
     }
+    // to remove
+    std::cout << "pass valid" << std::endl;
 
     this->clients[client_fd].second.is_pass_set = true;
 }
