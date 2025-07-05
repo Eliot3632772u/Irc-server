@@ -93,8 +93,8 @@ void Server::acceptConnections()
     while (true)
     {
 
-        int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
         std::cout << "waiting :" << std::endl;
+        int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
         if (ready_fds < 0)
         {
 
@@ -104,12 +104,13 @@ void Server::acceptConnections()
 
         for (int i = 0; i < ready_fds; i++)
         {
-
             int fd = events[i].data.fd;
-
+            
             if (fd == this->socketFd)
             {
-
+                
+                std::cout << ready_fds << std::endl;
+                std::cout << fd << std::endl;
                 int client_fd = accept(fd, NULL, NULL);
                 if (client_fd < 0)
                 {
@@ -141,9 +142,10 @@ void Server::acceptConnections()
             }
             else
             {
-
                 // parse cmd
                 readReq(fd);
+                // if (!this->clients[fd].second.command.empty())
+                //     handleMessage(fd);
             }
         }
     }
@@ -156,11 +158,12 @@ void Server::readReq(int client_fd)
 
     ssize_t read_bytes;
     if ((read_bytes = read(client_fd, buffer, 549)) == -1)
+    {
         return;
+    }
 
     if (read_bytes == 0)
     {
-
         // delete_client
         close(client_fd);
         this->clients.erase(client_fd);
@@ -168,6 +171,7 @@ void Server::readReq(int client_fd)
     }
 
     std::string bufferString = buffer;
+
 
     if (bufferString.size() + this->clients[client_fd].second.buffer.size() > 512)
     {
@@ -182,7 +186,7 @@ void Server::readReq(int client_fd)
 
     if (bufferString.size() > 1)
     {
-
+        
         if ((bufferString[bufferString.size() - 1] == '\n' && bufferString[bufferString.size() - 2] == '\r'))
         {
 
@@ -208,13 +212,14 @@ void Server::readReq(int client_fd)
             }
 
             parseCmd(client_fd);
+
         }
     }
+
 }
 
 void Server::parseCmd(int client_fd)
 {
-
     size_t last = this->clients[client_fd].second.buffer.size() - 3;
     std::string buffer =  this->clients[client_fd].second.buffer.substr(0, last);
 
@@ -259,33 +264,35 @@ void Server::parseCmd(int client_fd)
         command = buffer.substr(0, commandl);
     else{
 
+        
         clearClientData(client_fd);
         serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
         return;
     }
-
+    
     for (size_t i = 0; i < command.size(); i++)
     {
-
+        
         if (!isalpha(command[i]))
         {
-
+            
             // throw not valid command
             clearClientData(client_fd);
             serverResponse(client_fd, ERR_UNKNOWNCOMMAND);
             return;
         }
     }
-
+    
     this->clients[client_fd].second.command = command;
-
+    
     if (commandl + 1 < buffer.size())
-        buffer = buffer.substr(commandl + 1);
+    buffer = buffer.substr(commandl + 1);
     else
     {
-
+        
+        std::cout << "wslat hansnanananananananan" << std::endl;
         this->clients[client_fd].second.buffer.clear();
-        // responde to message
+        // no parameters error
         return;
     }
 
@@ -301,7 +308,8 @@ void Server::parseCmd(int client_fd)
 
             this->clients[client_fd].second.buffer.clear();
             // respond to message
-            return ;
+            // return ;
+            break;
         }
 
         buffer = buffer.substr(pos);
@@ -330,18 +338,20 @@ void Server::parseCmd(int client_fd)
             this->clients[client_fd].second.params.push_back(param.substr(1));
             this->clients[client_fd].second.buffer.clear();
             // responde to message
-            return;
+            // return;
+            break;
         }
 
         this->clients[client_fd].second.params.push_back(param);
     }
 
-    if (this->clients[client_fd].second.params.size() > 15)
+    if (this->clients[client_fd].second.params.size() > 15 || this->clients[client_fd].second.params.size() == 0)
     {
 
         serverResponse(client_fd, ERR_NEEDMOREPARAMS);
         return;
     }
+    handleMessage(client_fd);
 }
 
 void Server::serverResponse(int client_fd, enum status code)
@@ -363,13 +373,16 @@ void Server::handleMessage(int client_fd)
 {
     if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
     {
+        std::cout << "PREFIX" << std::endl;
         serverResponse(client_fd, ERR_NOSUCHNICK);
         clearClientData(client_fd);
         return;
     }
-
+    std::cout << "CMD: " << this->clients[client_fd].second.command << std::endl;
     if (this->clients[client_fd].second.command == "PASS")
+    {
         passCMD(client_fd);
+    }
     else if (this->clients[client_fd].second.command == "NICK")
         nickCMD(client_fd);
     else if (this->clients[client_fd].second.command == "USER")
