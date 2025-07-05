@@ -352,44 +352,6 @@ void Server::parseCmd(int client_fd)
     clearClientData(client_fd);
 }
 
-void Server::serverResponse(int client_fd, enum status code, std::string msg)
-{
-    if (ERR_ERRONEUSNICKNAME == code)
-        msg += ":Erroneous nickname\r\n";
-    else if (ERR_UNKNOWNCOMMAND == code)
-        msg += ":Unknown command\r\n";
-    else if (ERR_NOSUCHNICK == code)
-        msg += ":No such nick/channel\r\n";
-    else if (ERR_ALREADYREGISTRED == code)
-        msg += ":Unauthorized command (already registered)\r\n";
-    else if (ERR_NEEDMOREPARAMS == code)
-        msg += ":Not enough parameters\r\n";
-    else if (ERR_PASSWDMISMATCH == code)
-        msg += ":Password incorrect\r\n";
-    else if (ERR_NOTREGISTERED == code)
-        msg += ":You have not registered\r\n";
-    else if (ERR_ERRONEUSNICKNAME == code)
-        msg += ":Erroneous nickname\r\n";
-    else if (ERR_NONICKNAMEGIVEN == code)
-        msg += ":No nickname given\r\n";
-    else if (ERR_NICKNAMEINUSE == code)
-        msg += ":Nickname is already in use\r\n";
-    else if (ERR_BADCHANNELKEY == code)
-        msg += ":Cannot join channel (+k)\r\n";
-    else if (ERR_INVITEONLYCHAN == code)
-        msg += ":Cannot join channel (+i)\r\n";
-    else if (ERR_CHANNELISFULL == code)
-        msg += ":Cannot join channel (+l)\r\n";
-    else if (ERR_NOSUCHCHANNEL == code)
-        msg += ":No such channel\r\n";
-    else if (ERR_NORECIPIENT == code)
-        msg += "\r\n";
-    else if (ERR_NOTEXTTOSEND == code)
-        msg += ":No text to send\r\n";
-    
-    send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
-}
-
 void Server::clearClientData(int client_fd)
 {
 
@@ -927,12 +889,12 @@ void Server::kickCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED, ":You have not registered");
         return;
     }
     if (this->clients[client_fd].second.params.size() < 2)
     {
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS, "KICK ");
         return;
     }
 
@@ -941,7 +903,7 @@ void Server::kickCMD(int client_fd)
     
     if (this->channels.count(channel) == 0)
     {
-        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL, channel + " ");
         return;
     }
     
@@ -956,7 +918,7 @@ void Server::kickCMD(int client_fd)
     }
     if (!IsOperator)
     {
-        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED, channel + " ");
         return;
     }
 
@@ -971,7 +933,7 @@ void Server::kickCMD(int client_fd)
     }
     if (!isMember)
     {
-        serverResponse(client_fd, ERR_NOTONCHANNEL);
+        serverResponse(client_fd, ERR_NOTONCHANNEL, channel + " ");
         return;
     }
     
@@ -1004,12 +966,12 @@ void Server::inviteCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED, "");
         return;
     }
     if (this->clients[client_fd].second.params.size() < 2)
     {
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS, "INVITE ");
         return;
     }
 
@@ -1027,13 +989,13 @@ void Server::inviteCMD(int client_fd)
     }
     if (!nickExists)
     {
-        serverResponse(client_fd, ERR_NOSUCHNICK);
+        serverResponse(client_fd, ERR_NOSUCHNICK, invited + " ");
         return;
     }
 
     if (this->channels.count(channel) == 0)
     {
-        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL, channel + " ");
         return;
     }
 
@@ -1048,7 +1010,7 @@ void Server::inviteCMD(int client_fd)
     }
     if (!IsOperator)
     {
-        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED, channel + " ");
         return;
     }
 
@@ -1077,7 +1039,7 @@ void Server::inviteCMD(int client_fd)
     }
     if (already)
     {
-        serverResponse(client_fd, ERR_USERONCHANNEL);
+        serverResponse(client_fd, ERR_USERONCHANNEL, invited + " " + channel + " ");
         return;
     }
     if (this->channels[channel].invite_only)
@@ -1091,17 +1053,17 @@ void Server::topicCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, ERR_NOTREGISTERED);
+        serverResponse(client_fd, ERR_NOTREGISTERED, "");
         return;
     }
     if (this->clients[client_fd].second.params.size() < 1)
     {
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS);
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS, "TOPIC ");
         return;
     }
     if (this->channels.count(this->clients[client_fd].second.params.front()) == 0 || !validChanName(this->clients[client_fd].second.params.front()))
     {
-        serverResponse(client_fd, ERR_NOSUCHCHANNEL);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL, this->clients[client_fd].second.params.front() + " ");
         return;
     }
 
@@ -1117,7 +1079,7 @@ void Server::topicCMD(int client_fd)
     }
     if (!IsOperator)
     {
-        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED);
+        serverResponse(client_fd, ERR_CHANOPRIVSNEEDED, chan_name + " ");
         return;
     }
 
@@ -1131,6 +1093,51 @@ void Server::topicCMD(int client_fd)
         // send topic to operator 
         // should send to other users as well.
     }
+}
+
+void Server::serverResponse(int client_fd, enum status code, std::string msg)
+{
+    if (ERR_ERRONEUSNICKNAME == code)
+        msg += ":Erroneous nickname\r\n";
+    else if (ERR_UNKNOWNCOMMAND == code)
+        msg += ":Unknown command\r\n";
+    else if (ERR_NOSUCHNICK == code)
+        msg += ":No such nick/channel\r\n";
+    else if (ERR_ALREADYREGISTRED == code)
+        msg += ":Unauthorized command (already registered)\r\n";
+    else if (ERR_NEEDMOREPARAMS == code)
+        msg += ":Not enough parameters\r\n";
+    else if (ERR_PASSWDMISMATCH == code)
+        msg += ":Password incorrect\r\n";
+    else if (ERR_NOTREGISTERED == code)
+        msg += ":You have not registered\r\n";
+    else if (ERR_ERRONEUSNICKNAME == code)
+        msg += ":Erroneous nickname\r\n";
+    else if (ERR_NONICKNAMEGIVEN == code)
+        msg += ":No nickname given\r\n";
+    else if (ERR_NICKNAMEINUSE == code)
+        msg += ":Nickname is already in use\r\n";
+    else if (ERR_BADCHANNELKEY == code)
+        msg += ":Cannot join channel (+k)\r\n";
+    else if (ERR_INVITEONLYCHAN == code)
+        msg += ":Cannot join channel (+i)\r\n";
+    else if (ERR_CHANNELISFULL == code)
+        msg += ":Cannot join channel (+l)\r\n";
+    else if (ERR_NOSUCHCHANNEL == code)
+        msg += ":No such channel\r\n";
+    else if (ERR_NORECIPIENT == code)
+        msg += "\r\n";
+    else if (ERR_NOTEXTTOSEND == code)
+        msg += ":No text to send\r\n";
+    else if (ERR_CHANOPRIVSNEEDED == code)
+        msg += ":You're not channel operator\r\n";
+    else if (ERR_NOTONCHANNEL == code)
+        msg += ":You're not on that channel\r\n"
+    else if (ERR_USERONCHANNEL == code)
+        msg += ":is already on channel\r\n";
+    else if (
+    
+    send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
 
 void Server::modeCMD(int client_fd)
