@@ -64,7 +64,7 @@ struct Server
     void acceptConnections();
     void readReq(int client_fd);
     void parseCmd(int client_fd);
-    void serverResponse(int client_fd, enum status code, std::string msg);
+    void serverResponse(int client_fd, enum status code, std::string color, std::string msg);
     void clearClientData(int client_fd);
     void handleMessage(int client_fd);
 
