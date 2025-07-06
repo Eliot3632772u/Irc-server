@@ -145,11 +145,7 @@ void Server::acceptConnections()
             }
             else
             {
-                std::cout << "here" << std::endl;
-                // parse cmd
                 readReq(fd);
-                // if (!this->clients[fd].second.command.empty())
-                //     handleMessage(fd);
             }
         }
     }
@@ -216,7 +212,6 @@ void Server::readReq(int client_fd)
                     return;
                 }
             }
-            std::cout << "=-----------------------------=" << std::endl;
             parseCmd(client_fd);
 
         }
@@ -228,7 +223,6 @@ void Server::parseCmd(int client_fd)
 {
     std::string buffer =  this->clients[client_fd].second.buffer;
 
-    std::cout << "BUFFER: " << buffer << std::endl;
     if (buffer[0] == ':')
     {
 
@@ -353,7 +347,6 @@ void Server::parseCmd(int client_fd)
         return;
     }
 
-    std::cout << "here" << std::endl;
     handleMessage(client_fd);
     clearClientData(client_fd);
 }
@@ -420,6 +413,8 @@ void Server::serverResponse(int client_fd, enum status code, std::string msg)
         msg += "\r\n";
     else if (ERR_KEYSET == code)
         msg += "467 :Channel key already set\r\n";
+    else if (RPL_INVITING == code)
+        msg += "\r\n";
     
     send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
@@ -576,7 +571,6 @@ void Server::handleMessage(int client_fd)
         clearClientData(client_fd);
         return;
     }
-    std::cout << "CMD: " << this->clients[client_fd].second.command << std::endl;
     if (this->clients[client_fd].second.command == "PASS")
     {
         passCMD(client_fd);
@@ -702,10 +696,9 @@ void Server::nickCMD(int client_fd)
     {
         // <nick>!<user>@<host>
         std::string full = this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host;
-        serverResponse(client_fd, RPL_WELCOME, "Welcome to the Internet Relay Network " + full);
+        serverResponse(client_fd, RPL_WELCOME, "001 " + this->clients[client_fd].second.nick + ":Welcome to the Internet Relay Network " + full);
         this->clients[client_fd].second.authenticated = true;
     }
-    this->clients[client_fd].second.authenticated = true;
 
 
     // to remove
@@ -748,7 +741,7 @@ void Server::userCMD(int client_fd)
     {
         // <nick>!<user>@<host>
         std::string full = this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host;
-        serverResponse(client_fd, RPL_WELCOME, "Welcome to the Internet Relay Network " + full);
+        serverResponse(client_fd, RPL_WELCOME, "001 " + this->clients[client_fd].second.nick + " :Welcome to the Internet Relay Network " + full);
         this->clients[client_fd].second.authenticated = true;
     }
 
@@ -781,9 +774,8 @@ void Server::joinCMD(int client_fd)
             {
                 if (areEqualScandi(this->clients[client_fd].second.nick, channel.members[j]))
                 {
-                    // :alice!bob@127.0.0.1 PART #school :Goodbye!
                     std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " PART " + channel.name + ": Goodbye!";
-                    channel.broadcastToAll(this->clients, this->clients[client_fd].second, message);
+                    channel.broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
                     channel.members.erase(channel.members.begin() + j);
                     break;
                 }
@@ -794,7 +786,7 @@ void Server::joinCMD(int client_fd)
                 if (areEqualScandi(this->clients[client_fd].second.nick, channel.operators[j]))
                 {
                     std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " PART " + channel.name + ": Goodbye!";
-                    channel.broadcastToAll(this->clients, this->clients[client_fd].second, message);
+                    channel.broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
                     channel.operators.erase(channel.operators.begin() + j);
                     break;
                 }
@@ -832,69 +824,67 @@ void Server::joinCMD(int client_fd)
     for (size_t i = 0; i < chans_vec.size(); i++)
     {
         std::string name = chans_vec[i];
-        if (validChanName(name))
+        if (!validChanName(name))
         {
-            if (this->channels.count(name) > 0)
+            serverResponse(client_fd, ERR_NOSUCHCHANNEL, name + " ");
+        }
+        else if (this->channels.count(name) > 0)
+        {
+            if (!this->clients[client_fd].second.hasChannel(name))
             {
-                if (std::find(this->clients[client_fd].second.channels.begin(), this->clients[client_fd].second.channels.end(), name) == this->clients[client_fd].second.channels.end())
+                if (!this->channels[name].password.empty() && this->channels[name].password != keys_vec[i])
                 {
-                    if (!this->channels[name].password.empty() && this->channels[name].password != keys_vec[i])
+                    serverResponse(client_fd, ERR_BADCHANNELKEY, name + " ");
+                    continue;
+                }
+                else if (this->channels[name].userlimited && this->channels[name].members.size() + this->channels[name].operators.size() >= this->channels[name].max_users)
+                {
+                    serverResponse(client_fd, ERR_CHANNELISFULL, name + " ");
+                }
+                else if (this->channels[name].invite_only)
+                {
+                    bool was_able_to_join = false;
+                    for (size_t i = 0; i < this->channels[name].invited_users.size(); i++)
                     {
-                        serverResponse(client_fd, ERR_BADCHANNELKEY, name + " ");
-                        continue;
-                    }
-                    else if (this->channels[name].userlimited && this->channels[name].members.size() + this->channels[name].operators.size() >= this->channels[name].max_users)
-                    {
-                        serverResponse(client_fd, ERR_CHANNELISFULL, name + " ");
-                    }
-                    else if (this->channels[name].invite_only)
-                    {
-                        bool was_able_to_join = false;
-                        for (size_t i = 0; i < this->channels[name].invited_users.size(); i++)
+                        if (areEqualScandi(this->channels[name].invited_users[i], this->clients[client_fd].second.nick))
                         {
-                            if (areEqualScandi(this->channels[name].invited_users[i], this->clients[client_fd].second.nick))
-                            {
-                                std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
-                                this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
+                            this->channels[name].invited_users.erase(this->channels[name].invited_users.begin() + i);
+                            this->channels[name].members.push_back(this->clients[client_fd].second.nick);
+                            this->clients[client_fd].second.channels.push_back(name);
+                            was_able_to_join = true;
+                            std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
+                            this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
 
-                                this->channels[name].invited_users.erase(this->channels[name].invited_users.begin() + i);
-                                this->channels[name].members.push_back(this->clients[client_fd].second.nick);
-                                this->clients[client_fd].second.channels.push_back(name);
-                                was_able_to_join = true;
-                                break;
-                            }
-                        }
-                        if (!was_able_to_join)
-                        {
-                            serverResponse(client_fd, ERR_INVITEONLYCHAN, name + " ");
+                            break;
                         }
                     }
-                    else
+                    if (!was_able_to_join)
                     {
-                        std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
-                        this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
-                        this->channels[name].members.push_back(this->clients[client_fd].second.nick);
-                        this->clients[client_fd].second.channels.push_back(name);
+                        serverResponse(client_fd, ERR_INVITEONLYCHAN, name + " ");
                     }
                 }
-            }
-            else
-            {
-                Channel new_chan;
-                new_chan.name = name;
+                else
+                {
+                    this->channels[name].members.push_back(this->clients[client_fd].second.nick);
+                    this->clients[client_fd].second.channels.push_back(name);
 
-                this->clients[client_fd].second.channels.push_back(name);
-
-                new_chan.operators.push_back(this->clients[client_fd].second.nick);
-                this->channels[name] = new_chan;
-                
-                std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
-                this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
+                    std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
+                    this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
+                }
             }
         }
         else
         {
-            serverResponse(client_fd, ERR_NOSUCHCHANNEL, name + " ");
+            Channel new_chan;
+            new_chan.name = name;
+            new_chan.operators.push_back(this->clients[client_fd].second.nick);
+
+            this->clients[client_fd].second.channels.push_back(name);
+
+            this->channels[name] = new_chan;
+            
+            std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
+            this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
         }
     }
 }
@@ -963,7 +953,7 @@ void Server::privmsgCMD(int client_fd)
         if (this->channels.count(channels[i]) > 0)
         {
             std::string info = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@irc.server.ma PRIVMSG " + target + " :";
-            this->channels[target].broadcastToAll(this->clients, this->clients[client_fd].second, info + message);
+            this->channels[target].broadcastToAll(this->clients, this->clients[client_fd].second, info + message, false);
         }
         else
         {
@@ -1044,11 +1034,24 @@ void Server::kickCMD(int client_fd)
             // :<nick>!<user>@<host> KICK <#channel> <nick> [:reason]
             std::string message = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " KICK " + channel + " " + targetNick;
             message += (this->clients[client_fd].second.params.size() > 2? this->clients[client_fd].second.params[2] : "");
-            chan.broadcastToAll(this->clients, this->clients[client_fd].second, message);
+            chan.broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
             chans.erase(chan_it);
             break;
         }
         chan_it++;
+    }
+}
+
+void Server::sendMessageByNick(std::string nick, std::string message)
+{
+    std::map<int, std::pair<int, Client> >::iterator  it = this->clients.begin();
+    while (it != this->clients.end())
+    {
+        if (it->second.second.nick == nick)
+        {
+            send(it->second.second.client_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
+        }
+        it++;
     }
 }
 
@@ -1076,6 +1079,7 @@ void Server::inviteCMD(int client_fd)
         {
             nickExists = true;
         }
+        it++;
     }
     if (!nickExists)
     {
@@ -1120,13 +1124,12 @@ void Server::inviteCMD(int client_fd)
         serverResponse(client_fd, ERR_USERONCHANNEL, invited + " " + channel + " ");
         return;
     }
-    if (this->channels[channel].invite_only)
-    {
-        std::string message = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " INVITE " + invited + ":" + chan.name;
-        chan.broadcastToAll(this->clients, this->clients[client_fd].second, message);
-        this->channels[channel].invited_users.push_back(invited);
-    }
+    this->channels[channel].invited_users.push_back(invited);
 
+    std::string inviteeMessage = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " INVITE " + invited + ":" + chan.name + "\r\n";
+    this->sendMessageByNick(invited, inviteeMessage);
+
+    serverResponse(client_fd, RPL_INVITING, chan.name + " " + invited);
 }
 
 void Server::topicCMD(int client_fd)
@@ -1166,7 +1169,7 @@ void Server::topicCMD(int client_fd)
     if (this->clients[client_fd].second.params.size() > 1)
     {
         std::string message = ":" + nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " TOPIC " + chan_name + ":" + this->clients[client_fd].second.params[1];
-        this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
+        this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
         
         this->channels[chan_name].topic = this->clients[client_fd].second.params[1];
     }
@@ -1357,11 +1360,10 @@ void Server::modeCMD(int client_fd)
         serverResponse(client_fd, ERR_UNKNOWNMODE, mode + " 472 :is unknown mode char to me for " + mode[1]);
         return ;
     }
-    // :alice!bob@irc.local MODE #chat +k secretkey
     std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " MODE " + chan_name;
     for (size_t i = 1; i < this->clients[client_fd].second.params.size(); i++)
     {
         message += " " + this->clients[client_fd].second.params[i];
     }
-    this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
+    this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
 }

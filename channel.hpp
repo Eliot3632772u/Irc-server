@@ -22,7 +22,7 @@ struct Channel
     // is operator to make code cleaner
     // is invited 
     // send message to all memebers
-    void broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message) const;
+    void broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message, bool include_sender) const;
 };
 
 

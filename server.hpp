@@ -41,6 +41,8 @@ enum status
     RPL_TOPIC = 332,
 
     ERR_KEYSET = 467,
+
+    RPL_INVITING = 341,
 };
 
 struct Server
@@ -74,4 +76,6 @@ struct Server
     void topicCMD(int client_fd);
     void modeCMD(int client_fd);
     void botCMD(int client_fd);
+
+    void sendMessageByNick(std::string nick, std::string message);
 };

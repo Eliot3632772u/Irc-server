@@ -2,6 +2,8 @@
 
 #include "inc.hpp"
 
+bool areEqualScandi(const std::string& one, const std::string& two);
+
 struct Client
 {
     int client_fd;
@@ -16,53 +18,16 @@ struct Client
     std::vector<std::string> params;
 
     std::string host;
+
+    bool hasChannel(std::string& name);
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+inline bool Client::hasChannel(std::string& name)
+{
+    for (size_t i = 0; i < this->channels.size(); i++)
+    {
+        if (areEqualScandi(name, this->channels[i]))
+            return true;
+    }
+    return false;
+}

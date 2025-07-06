@@ -24,7 +24,7 @@ bool Channel::isAnyMember(const std::string& nick) const
 	return false;
 }
 
-void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message) const
+void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message, bool include_sender) const
 {
 	message += "\r\n";
 
@@ -37,6 +37,10 @@ void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& recipients,
 			send(it->second.second.client_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
 		}
 		it++;
+	}
+	if (include_sender)
+	{
+		send(sender.client_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
 	}
 }
 
