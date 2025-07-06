@@ -20,14 +20,7 @@ struct Client
     std::string host;
 
     bool hasChannel(std::string& name);
+
+    void removeChannel(std::string chan);
 };
 
-inline bool Client::hasChannel(std::string& name)
-{
-    for (size_t i = 0; i < this->channels.size(); i++)
-    {
-        if (areEqualScandi(name, this->channels[i]))
-            return true;
-    }
-    return false;
-}

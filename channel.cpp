@@ -50,3 +50,20 @@ Channel::Channel(){
 	this->userlimited = false;
 	this->topic_restricted = false;
 }
+
+struct nickCompare
+{
+	std::string target;
+	nickCompare(const std::string& n) : target(n) {}
+	bool operator()(const std::string& current) const
+	{
+		return areEqualScandi(current, target);
+	}
+};
+
+
+void Channel::removeMember(std::string nick)
+{
+	this->members.erase(std::remove_if(this->members.begin(), this->members.end(), nickCompare(nick)), this->members.end());
+	this->operators.erase(std::remove_if(this->operators.begin(), this->operators.end(), nickCompare(nick)), this->operators.end());
+}

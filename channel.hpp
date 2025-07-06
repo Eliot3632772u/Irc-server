@@ -23,6 +23,8 @@ struct Channel
     // is invited 
     // send message to all memebers
     void broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message, bool include_sender) const;
+
+    void removeMember(std::string nick);
 };
 
 

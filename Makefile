@@ -7,7 +7,8 @@ INCS = inc.hpp \
 		client.hpp
 SRCS = main.cpp \
 		server.cpp \
-		channel.cpp
+		channel.cpp \
+		client.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(NAME)

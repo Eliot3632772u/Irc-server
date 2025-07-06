@@ -168,10 +168,7 @@ void Server::acceptConnections()
             }
             else
             {
-<<<<<<< HEAD
-=======
                 // check this->events[i].filter == EVFILT_WRITE | EVFILT_READ if ready for write and read if not return 
->>>>>>> d44771a02cfd9dc3c3eee4198c401766916a8ceb
                 readReq(fd);
             }
         }
@@ -977,7 +974,7 @@ void Server::privmsgCMD(int client_fd)
     for (size_t i = 0; i < channels.size(); i++)
     {
         std::string& target = channels[i];
-        if (this->channels.count(channels[i]) > 0)
+        if (this->channels.count(channels[i]) > 0 && this->channels[channels[i]].isAnyMember(this->clients[client_fd].second.nick))
         {
             std::string info = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@irc.server.ma PRIVMSG " + target + " :";
             this->channels[target].broadcastToAll(this->clients, this->clients[client_fd].second, info + message, false);
@@ -1027,46 +1024,27 @@ void Server::kickCMD(int client_fd)
     }
 
     Channel& chan = this->channels[channel];
-    bool isMember = false;
-    for (size_t i = 0; i < chan.members.size(); i++)
-    {
-        if (areEqualScandi(chan.members[i], targetNick))
-        {
-            isMember = true;
-        }
-    }
-    if (!isMember)
+    if (!chan.isAnyMember(targetNick))
     {
         serverResponse(client_fd, ERR_NOTONCHANNEL, channel + " ");
         return;
     }
     
-    std::vector<std::string> memebers = this->channels[channel].members;
-    memebers.erase(std::remove(memebers.begin(), memebers.end(), targetNick), memebers.end()); // still needs lower case
     std::map<int, std::pair<int, Client> >::iterator it = this->clients.begin();
     while (it != this->clients.end())
     {
-        if (it->second.second.nick == targetNick)
+        if (areEqualScandi(it->second.second.nick, targetNick))
         {
-            break;
+            it->second.second.removeChannel(chan.name);
         }
         it++;
     }
-    std::vector<std::string> chans = it->second.second.channels;
-    std::vector<std::string>::iterator chan_it = chans.begin();
-    while (chan_it != chans.end())
-    {
-        if (areEqualScandi(*chan_it, channel))
-        {
-            // :<nick>!<user>@<host> KICK <#channel> <nick> [:reason]
-            std::string message = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " KICK " + channel + " " + targetNick;
-            message += (this->clients[client_fd].second.params.size() > 2? this->clients[client_fd].second.params[2] : "");
-            chan.broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
-            chans.erase(chan_it);
-            break;
-        }
-        chan_it++;
-    }
+    
+    std::string message = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " KICK " + channel + " " + targetNick;
+    message += (this->clients[client_fd].second.params.size() > 2? this->clients[client_fd].second.params[2] : "");
+    chan.broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
+
+    chan.removeMember(targetNick);
 }
 
 void Server::sendMessageByNick(std::string nick, std::string message)

@@ -43,6 +43,7 @@ enum status
     ERR_KEYSET = 467,
 
     RPL_INVITING = 341,
+    
 };
 
 struct Server
