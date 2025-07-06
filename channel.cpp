@@ -26,7 +26,7 @@ bool Channel::isAnyMember(const std::string& nick) const
 
 void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message, bool include_sender) const
 {
-	message += "\r\n" RESET;
+	message += "\r\n";
 
 	std::map<int, std::pair<int, Client> >::iterator it = recipients.begin();
 	
