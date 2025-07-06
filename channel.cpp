@@ -24,18 +24,19 @@ bool Channel::isAnyMember(const std::string& nick) const
 	return false;
 }
 
-void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& clients, int except, std::string message) const
+void Channel::broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message) const
 {
-	std::map<int, std::pair<int, Client> >::iterator it = clients.begin();
-	while (it != clients.end())
+	message += "\r\n";
+
+	std::map<int, std::pair<int, Client> >::iterator it = recipients.begin();
+	
+	while (it != recipients.end())
 	{
-		std::cout << "SEND LOOP" << std::endl;
-		if (except != it->second.second.client_fd && isAnyMember(it->second.second.nick))
+		if (sender.nick != it->second.second.nick && isAnyMember(it->second.second.nick))
 		{
-			std::cout << "Tried to send to " << it->second.second.nick << std::endl;
-			message += "\r\n";
-			send(it->second.second.client_fd, message.c_str(), message.size(), MSG_NOSIGNAL); // check failure
+			send(it->second.second.client_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
 		}
+		it++;
 	}
 }
 

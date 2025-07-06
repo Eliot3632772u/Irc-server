@@ -34,6 +34,13 @@ enum status
 
     ERR_NOTEXTTOSEND = 412,
     ERR_NORECIPIENT = 411,
+
+    RPL_WELCOME = 1,
+
+    RPL_NOTOPIC = 331,
+    RPL_TOPIC = 332,
+
+    ERR_KEYSET = 467,
 };
 
 struct Server

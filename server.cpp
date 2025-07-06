@@ -108,10 +108,11 @@ void Server::acceptConnections()
             
             if (fd == this->socketFd)
             {
-                
-                std::cout << ready_fds << std::endl;
-                std::cout << fd << std::endl;
-                int client_fd = accept(fd, NULL, NULL);
+
+                struct sockaddr_in client_addr;
+                socklen_t addr_len = sizeof(client_addr);
+                int client_fd = accept(fd, (struct sockaddr *)&client_addr, &addr_len);
+                // int client_fd = accept(fd, NULL, NULL);
                 if (client_fd < 0)
                 {
 
@@ -138,10 +139,13 @@ void Server::acceptConnections()
 
                 this->clients[client_fd].second.client_fd = client_fd;
 
+                this->clients[client_fd].second.host = inet_ntoa(client_addr.sin_addr);
+
                 continue;
             }
             else
             {
+                std::cout << "here" << std::endl;
                 // parse cmd
                 readReq(fd);
                 // if (!this->clients[fd].second.command.empty())
@@ -212,7 +216,7 @@ void Server::readReq(int client_fd)
                     return;
                 }
             }
-
+            std::cout << "=-----------------------------=" << std::endl;
             parseCmd(client_fd);
 
         }
@@ -349,6 +353,7 @@ void Server::parseCmd(int client_fd)
         return;
     }
 
+    std::cout << "here" << std::endl;
     handleMessage(client_fd);
     clearClientData(client_fd);
 }
@@ -362,44 +367,138 @@ void Server::clearClientData(int client_fd)
     this->clients[client_fd].second.params.clear();
 }
 
-void Server::handleMessage(int client_fd)
+void Server::serverResponse(int client_fd, enum status code, std::string msg)
 {
-    std::string & command = this->clients[client_fd].second.command;
-    if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
+    msg.insert(0, RED ":irc.server.ma ");
+    if (ERR_ERRONEUSNICKNAME == code)
+        msg += "432 :Erroneous nickname\r\n" RESET;
+    else if (ERR_UNKNOWNCOMMAND == code)
+        msg += "421 :Unknown command\r\n" RESET;
+    else if (ERR_NOSUCHNICK == code)
+        msg += "401 :No such nick/channel\r\n" RESET;
+    else if (ERR_ALREADYREGISTRED == code)
+        msg += "462 :Unauthorized command (already registered)\r\n" RESET;
+    else if (ERR_NEEDMOREPARAMS == code)
+        msg += "461 :Not enough parameters\r\n" RESET;
+    else if (ERR_PASSWDMISMATCH == code)
+        msg += "464 :Password incorrect\r\n" RESET;
+    else if (ERR_NOTREGISTERED == code)
+        msg += "451 :You have not registered\r\n" RESET;
+    else if (ERR_ERRONEUSNICKNAME == code)
+        msg += "432 :Erroneous nickname\r\n" RESET;
+    else if (ERR_NONICKNAMEGIVEN == code)
+        msg += "431 :No nickname given\r\n" RESET;
+    else if (ERR_NICKNAMEINUSE == code)
+        msg += "433 :Nickname is already in use\r\n" RESET;
+    else if (ERR_BADCHANNELKEY == code)
+        msg += "475 :Cannot join channel (+k)\r\n" RESET;
+    else if (ERR_INVITEONLYCHAN == code)
+        msg += "473 :Cannot join channel (+i)\r\n" RESET;
+    else if (ERR_CHANNELISFULL == code)
+        msg += "471 :Cannot join channel (+l)\r\n" RESET;
+    else if (ERR_NOSUCHCHANNEL == code)
+        msg += "403 :No such channel\r\n" RESET;
+    else if (ERR_NORECIPIENT == code)
+        msg += "\r\n" RESET;
+    else if (ERR_NOTEXTTOSEND == code)
+        msg += "412 :No text to send\r\n" RESET;
+    else if (ERR_CHANOPRIVSNEEDED == code)
+        msg += "482 :You're not channel operator\r\n" RESET;
+    else if (ERR_NOTONCHANNEL == code)
+        msg += "442 :You're not on that channel\r\n" RESET;
+    else if (ERR_USERONCHANNEL == code)
+        msg += "443 :is already on channel\r\n" RESET;
+    else if (ERR_USERNOTINCHANNEL == code)
+        msg += "441 :They aren't on that channel\r\n" RESET;
+    else if (ERR_UNKNOWNMODE == code)
+        msg += "\r\n" RESET;
+    else if (RPL_WELCOME == code)
+        msg += "\r\n" GREEN;
+    else if (RPL_NOTOPIC == code)
+        msg += "331 :No topic is set\r\n";
+    else if (RPL_TOPIC == code)
+        msg += "\r\n";
+    else if (ERR_KEYSET == code)
+        msg += "467 :Channel key already set\r\n";
+    
+    send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
+}
+
+std::string toLowerScandi(std::string &str)
+{
+    std::string lower = str;
+    for (size_t i = 0; i < str.size(); i++)
     {
-        serverResponse(client_fd, ERR_NOSUCHNICK, this->clients[client_fd].second.nick);
-        clearClientData(client_fd);
-        return;
+        char &c = str[i];
+        if (c >= 'A' && c <= 'Z')
+            lower[i] = c + 32;
+        else if (c == '[')
+            lower[i] = '{';
+        else if (c == ']')
+            lower[i] = '}';
+        else if (c == '\\')
+            lower[i] = '|';
+        else if (c == '~')
+            lower[i] = '^';
     }
-    std::cout << "CMD: " << this->clients[client_fd].second.command << std::endl;
-    if (this->clients[client_fd].second.command == "PASS")
+    return lower;
+}
+
+bool areEqualScandi(const std::string& one, const std::string& two)
+{
+    if (one.length() != two.length())
+        return false;
+    
+    for (size_t i = 0; i < one.length(); i++)
     {
-        passCMD(client_fd);
+        char c1 = one[i];
+        char c2 = two[i];
+        
+        if (c1 >= 'A' && c1 <= 'Z')
+            c1 += 32;
+        else if (c1 == '[')
+            c1 = '{';
+        else if (c1 == ']')
+            c1 = '}';
+        else if (c1 == '\\')
+            c1 = '|';
+        else if (c1 == '~')
+            c1 = '^';
+
+        if (c2 >= 'A' && c2 <= 'Z')
+            c2 += 32;
+        else if (c2 == '[')
+            c2 = '{';
+        else if (c2 == ']')
+            c2 = '}';
+        else if (c2 == '\\')
+            c2 = '|';
+        else if (c2 == '~')
+            c2 = '^';
+        
+        if (c1 != c2)
+            return false;
     }
-    else if (this->clients[client_fd].second.command == "NICK")
-        nickCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "USER")
-        userCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "JOIN")
-        joinCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "PRIVMSG")
-        privmsgCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "KICK")
-        kickCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "INVITE")
-        inviteCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "TOPIC")
-        topicCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "MODE")
-        modeCMD(client_fd);
-    else if (this->clients[client_fd].second.command == "BOT")
-        botCMD(client_fd);
-	else
-	{
-		serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
-		clearClientData(client_fd);
-		return ;
+
+    return true;
+}
+
+bool validChanName(std::string& name)
+{
+    if (name.empty() || name.size() > 50)
+        return false;
+
+    char& first = name[0];
+    if (first != '#' && first != '&')
+        return false;
+
+    for (size_t i = 1; i < name.size(); i++)
+    {
+        char& c = name[i];
+        if (c == 0x00 || c == 0x07 || c == 0x0A || c == 0x0D || c == ' ' || c == ',' || c == ':')
+            return false;
     }
+    return true;
 }
 
 void Server::botCMD(int client_fd){
@@ -468,13 +567,52 @@ void Server::botCMD(int client_fd){
     }
 }
 
+void Server::handleMessage(int client_fd)
+{
+    std::string & command = this->clients[client_fd].second.command;
+    if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
+    {
+        serverResponse(client_fd, ERR_NOSUCHNICK, this->clients[client_fd].second.nick);
+        clearClientData(client_fd);
+        return;
+    }
+    std::cout << "CMD: " << this->clients[client_fd].second.command << std::endl;
+    if (this->clients[client_fd].second.command == "PASS")
+    {
+        passCMD(client_fd);
+    }
+    else if (this->clients[client_fd].second.command == "NICK")
+        nickCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "USER")
+        userCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "JOIN")
+        joinCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "PRIVMSG")
+        privmsgCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "KICK")
+        kickCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "INVITE")
+        inviteCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "TOPIC")
+        topicCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "MODE")
+        modeCMD(client_fd);
+    else if (this->clients[client_fd].second.command == "BOT")
+        botCMD(client_fd);
+	else
+	{
+		serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
+		clearClientData(client_fd);
+		return ;
+    }
+}
+
 void Server::passCMD(int client_fd)
 {
     if (this->clients[client_fd].second.is_pass_set)
     {
         serverResponse(client_fd, ERR_ALREADYREGISTRED, "");
         clearClientData(client_fd);
-        std::cout << "PASS aleardy set" << std::endl << std::endl;
         return;
     }
 
@@ -482,7 +620,6 @@ void Server::passCMD(int client_fd)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, this->clients[client_fd].second.command + " ");
         clearClientData(client_fd);
-        std::cout << "PASS alot of params" << std::endl << std::endl;
         return;
     }
 
@@ -490,72 +627,14 @@ void Server::passCMD(int client_fd)
     {
         serverResponse(client_fd, ERR_PASSWDMISMATCH, "");
         clearClientData(client_fd);
-        std::cout << "INValid PASS " << std::endl << std::endl;
         return;
     }
-    // to remove
-    std::cout << "pass valid" << std::endl;
 
     this->clients[client_fd].second.is_pass_set = true;
-}
 
-std::string toLowerScandi(std::string &str)
-{
-    std::string lower = str;
-    for (size_t i = 0; i < str.size(); i++)
-    {
-        char &c = str[i];
-        if (c >= 'A' && c <= 'Z')
-            lower[i] = c + 32;
-        else if (c == '[')
-            lower[i] = '{';
-        else if (c == ']')
-            lower[i] = '}';
-        else if (c == '\\')
-            lower[i] = '|';
-        else if (c == '~')
-            lower[i] = '^';
-    }
-    return lower;
-}
 
-bool areEqualScandi(const std::string& one, const std::string& two)
-{
-    if (one.length() != two.length())
-        return false;
-    
-    for (size_t i = 0; i < one.length(); i++)
-    {
-        char c1 = one[i];
-        char c2 = two[i];
-        
-        if (c1 >= 'A' && c1 <= 'Z')
-            c1 += 32;
-        else if (c1 == '[')
-            c1 = '{';
-        else if (c1 == ']')
-            c1 = '}';
-        else if (c1 == '\\')
-            c1 = '|';
-        else if (c1 == '~')
-            c1 = '^';
-
-        if (c2 >= 'A' && c2 <= 'Z')
-            c2 += 32;
-        else if (c2 == '[')
-            c2 = '{';
-        else if (c2 == ']')
-            c2 = '}';
-        else if (c2 == '\\')
-            c2 = '|';
-        else if (c2 == '~')
-            c2 = '^';
-        
-        if (c1 != c2)
-            return false;
-    }
-
-    return true;
+    // to remove
+    std::cout << "------pass done-----" << std::endl;
 }
 
 void Server::nickCMD(int client_fd)
@@ -609,18 +688,28 @@ void Server::nickCMD(int client_fd)
     for (size_t i = 1; i < this->clients[client_fd].second.params.front().size(); i++)
     {
         char &c = this->clients[client_fd].second.params.front()[i];
-        if (!std::isalnum(c) && std::string("[]\\`_^{|}").find(c) == std::string::npos)
+        if (!std::isalnum(c) && std::string("[]\\`_^{|}-").find(c) == std::string::npos)
         {
             serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
             clearClientData(client_fd);
             return;
         }
     }
+
     this->clients[client_fd].second.nick = this->clients[client_fd].second.params.front();
 
     if (!this->clients[client_fd].second.user.empty())
+    {
+        // <nick>!<user>@<host>
+        std::string full = this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host;
+        serverResponse(client_fd, RPL_WELCOME, "Welcome to the Internet Relay Network " + full);
         this->clients[client_fd].second.authenticated = true;
-    std::cout << "nickname done" << std::endl;
+    }
+    this->clients[client_fd].second.authenticated = true;
+
+
+    // to remove
+    std::cout << "------nickname done------" << std::endl;
 }
 
 void Server::userCMD(int client_fd)
@@ -646,7 +735,7 @@ void Server::userCMD(int client_fd)
         return;
     }
 
-    if (this->clients[client_fd].second.params.front().find('@') != std::string::npos)
+    if (this->clients[client_fd].second.params.front().find('@') != std::string::npos) // not necessary
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, "USER ");
         clearClientData(client_fd);
@@ -656,25 +745,14 @@ void Server::userCMD(int client_fd)
     this->clients[client_fd].second.user = this->clients[client_fd].second.params.front();
 
     if (!this->clients[client_fd].second.nick.empty())
-        this->clients[client_fd].second.authenticated = true;
-}
-
-bool validChanName(std::string& name)
-{
-    if (name.empty() || name.size() > 50)
-        return false;
-
-    char& first = name[0];
-    if (first != '#' && first != '&')
-        return false;
-
-    for (size_t i = 1; i < name.size(); i++)
     {
-        char& c = name[i];
-        if (c == 0x00 || c == 0x07 || c == 0x0A || c == 0x0D || c == ' ' || c == ',' || c == ':')
-            return false;
+        // <nick>!<user>@<host>
+        std::string full = this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host;
+        serverResponse(client_fd, RPL_WELCOME, "Welcome to the Internet Relay Network " + full);
+        this->clients[client_fd].second.authenticated = true;
     }
-    return true;
+
+    std::cout << "------- USER DONE ---------" << std::endl;
 }
 
 void Server::joinCMD(int client_fd)
@@ -703,7 +781,9 @@ void Server::joinCMD(int client_fd)
             {
                 if (areEqualScandi(this->clients[client_fd].second.nick, channel.members[j]))
                 {
-                    // send message to clients of the channel
+                    // :alice!bob@127.0.0.1 PART #school :Goodbye!
+                    std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " PART " + channel.name + ": Goodbye!";
+                    channel.broadcastToAll(this->clients, this->clients[client_fd].second, message);
                     channel.members.erase(channel.members.begin() + j);
                     break;
                 }
@@ -713,7 +793,8 @@ void Server::joinCMD(int client_fd)
             {
                 if (areEqualScandi(this->clients[client_fd].second.nick, channel.operators[j]))
                 {
-                    // send message to clients of the channel
+                    std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " PART " + channel.name + ": Goodbye!";
+                    channel.broadcastToAll(this->clients, this->clients[client_fd].second, message);
                     channel.operators.erase(channel.operators.begin() + j);
                     break;
                 }
@@ -753,17 +834,16 @@ void Server::joinCMD(int client_fd)
         std::string name = chans_vec[i];
         if (validChanName(name))
         {
-            if (this->channels.count(name) > 0) // channel exits need to check further checks 
+            if (this->channels.count(name) > 0)
             {
                 if (std::find(this->clients[client_fd].second.channels.begin(), this->clients[client_fd].second.channels.end(), name) == this->clients[client_fd].second.channels.end())
                 {
-                    std::cout << "boolean: --------------------------------------------" << this->channels[name].invite_only << std::endl;
                     if (!this->channels[name].password.empty() && this->channels[name].password != keys_vec[i])
                     {
                         serverResponse(client_fd, ERR_BADCHANNELKEY, name + " ");
                         continue;
                     }
-                    else if (this->channels[name].userlimited && this->channels[name].members.size() + this->channels[name].operators.size() == this->channels[name].max_users)
+                    else if (this->channels[name].userlimited && this->channels[name].members.size() + this->channels[name].operators.size() >= this->channels[name].max_users)
                     {
                         serverResponse(client_fd, ERR_CHANNELISFULL, name + " ");
                     }
@@ -774,7 +854,9 @@ void Server::joinCMD(int client_fd)
                         {
                             if (areEqualScandi(this->channels[name].invited_users[i], this->clients[client_fd].second.nick))
                             {
-                                // send some message to other clients in channel and client that joined
+                                std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
+                                this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
+
                                 this->channels[name].invited_users.erase(this->channels[name].invited_users.begin() + i);
                                 this->channels[name].members.push_back(this->clients[client_fd].second.nick);
                                 this->clients[client_fd].second.channels.push_back(name);
@@ -784,19 +866,19 @@ void Server::joinCMD(int client_fd)
                         }
                         if (!was_able_to_join)
                         {
-                            std::cout << "=-------------------------------------------------------" << std::endl;
                             serverResponse(client_fd, ERR_INVITEONLYCHAN, name + " ");
                         }
                     }
                     else
                     {
+                        std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
+                        this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
                         this->channels[name].members.push_back(this->clients[client_fd].second.nick);
                         this->clients[client_fd].second.channels.push_back(name);
-                        // send join message
                     }
                 }
             }
-            else // channel does not exist nned to create it and set client as operator for it.
+            else
             {
                 Channel new_chan;
                 new_chan.name = name;
@@ -805,7 +887,9 @@ void Server::joinCMD(int client_fd)
 
                 new_chan.operators.push_back(this->clients[client_fd].second.nick);
                 this->channels[name] = new_chan;
-                // inform other users but what other users there is none !
+                
+                std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " JOIN :" + name;
+                this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
             }
         }
         else
@@ -844,26 +928,25 @@ void Server::privmsgCMD(int client_fd)
         {
             channels.push_back(target);
         }
-        else
+        else if (target != this->clients[client_fd].second.nick)
         {
             users.push_back(target);
         }
     }
     
-    std::string message = this->clients[client_fd].second.params[1];
+    std::string message = this->clients[client_fd].second.params[1] + "\r\n";
     for (size_t i = 0; i < users.size(); i++)
     {
-        std::string& target = users[i];
         bool sent = false;
+        std::string& target = users[i];
         std::map<int, std::pair<int, Client> >::iterator it = this->clients.begin();
         while (it != this->clients.end())
         {
             std::string& connected = it->second.second.nick;
             if (areEqualScandi(target, connected))
             {
-                char* buffer = new char[message.size() + 1];
-                std::strcpy(buffer, message.c_str());
-                send(it->second.second.client_fd, buffer, message.size(), MSG_NOSIGNAL); // check errors maybe? 
+                std::string current = this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.nick + "@irc.server.ma PRIVMSG " + target + " :" + message;
+                send(it->second.second.client_fd, current.c_str(), current.size(), MSG_NOSIGNAL);
                 sent = true; 
             }
             it++;
@@ -879,7 +962,8 @@ void Server::privmsgCMD(int client_fd)
         std::string& target = channels[i];
         if (this->channels.count(channels[i]) > 0)
         {
-            this->channels[target].broadcastToAll(this->clients, client_fd, message);
+            std::string info = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@irc.server.ma PRIVMSG " + target + " :";
+            this->channels[target].broadcastToAll(this->clients, this->clients[client_fd].second, info + message);
         }
         else
         {
@@ -941,7 +1025,7 @@ void Server::kickCMD(int client_fd)
     }
     
     std::vector<std::string> memebers = this->channels[channel].members;
-    memebers.erase(std::remove(memebers.begin(), memebers.end(), targetNick), memebers.end());
+    memebers.erase(std::remove(memebers.begin(), memebers.end(), targetNick), memebers.end()); // still needs lower case
     std::map<int, std::pair<int, Client> >::iterator it = this->clients.begin();
     while (it != this->clients.end())
     {
@@ -957,7 +1041,10 @@ void Server::kickCMD(int client_fd)
     {
         if (areEqualScandi(*chan_it, channel))
         {
-            // send message
+            // :<nick>!<user>@<host> KICK <#channel> <nick> [:reason]
+            std::string message = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " KICK " + channel + " " + targetNick;
+            message += (this->clients[client_fd].second.params.size() > 2? this->clients[client_fd].second.params[2] : "");
+            chan.broadcastToAll(this->clients, this->clients[client_fd].second, message);
             chans.erase(chan_it);
             break;
         }
@@ -1019,20 +1106,8 @@ void Server::inviteCMD(int client_fd)
 
     Channel& chan = this->channels[channel];
     bool already = false;
-    for (size_t i = 0; i < chan.members.size(); i++)
-    {
-        if (areEqualScandi(chan.members[i], invited))
-        {
-            already = true;
-        }
-    }
-    for (size_t i = 0; i < chan.operators.size(); i++)
-    {
-        if (areEqualScandi(chan.operators[i], invited))
-        {
-            already = true;
-        }
-    }
+    if (chan.isAnyMember(invited))
+        already = true;
     for (size_t i = 0; i < chan.invited_users.size(); i++)
     {
         if (areEqualScandi(chan.invited_users[i], invited))
@@ -1047,6 +1122,8 @@ void Server::inviteCMD(int client_fd)
     }
     if (this->channels[channel].invite_only)
     {
+        std::string message = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " INVITE " + invited + ":" + chan.name;
+        chan.broadcastToAll(this->clients, this->clients[client_fd].second, message);
         this->channels[channel].invited_users.push_back(invited);
     }
 
@@ -1088,63 +1165,22 @@ void Server::topicCMD(int client_fd)
 
     if (this->clients[client_fd].second.params.size() > 1)
     {
+        std::string message = ":" + nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " TOPIC " + chan_name + ":" + this->clients[client_fd].second.params[1];
+        this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
+        
         this->channels[chan_name].topic = this->clients[client_fd].second.params[1];
-        // send status change to clients of channel
     }
     else
     {
-        // send topic to operator 
-        // should send to other users as well.
+        if (this->channels[chan_name].topic.empty())
+        {
+            serverResponse(client_fd, RPL_NOTOPIC, chan_name);
+        }
+        else
+        {
+            serverResponse(client_fd, RPL_TOPIC, chan_name + " :" + this->channels[chan_name].topic);
+        }
     }
-}
-
-void Server::serverResponse(int client_fd, enum status code, std::string msg)
-{
-    msg.insert(0, RED ":irc.server.ma ");
-    if (ERR_ERRONEUSNICKNAME == code)
-        msg += "432 :Erroneous nickname\r\n" RESET;
-    else if (ERR_UNKNOWNCOMMAND == code)
-        msg += "421 :Unknown command\r\n" RESET;
-    else if (ERR_NOSUCHNICK == code)
-        msg += "401 :No such nick/channel\r\n" RESET;
-    else if (ERR_ALREADYREGISTRED == code)
-        msg += "462 :Unauthorized command (already registered)\r\n" RESET;
-    else if (ERR_NEEDMOREPARAMS == code)
-        msg += "461 :Not enough parameters\r\n" RESET;
-    else if (ERR_PASSWDMISMATCH == code)
-        msg += "464 :Password incorrect\r\n" RESET;
-    else if (ERR_NOTREGISTERED == code)
-        msg += "451 :You have not registered\r\n" RESET;
-    else if (ERR_ERRONEUSNICKNAME == code)
-        msg += "432 :Erroneous nickname\r\n" RESET;
-    else if (ERR_NONICKNAMEGIVEN == code)
-        msg += "431 :No nickname given\r\n" RESET;
-    else if (ERR_NICKNAMEINUSE == code)
-        msg += "433 :Nickname is already in use\r\n" RESET;
-    else if (ERR_BADCHANNELKEY == code)
-        msg += "475 :Cannot join channel (+k)\r\n" RESET;
-    else if (ERR_INVITEONLYCHAN == code)
-        msg += "473 :Cannot join channel (+i)\r\n" RESET;
-    else if (ERR_CHANNELISFULL == code)
-        msg += "471 :Cannot join channel (+l)\r\n" RESET;
-    else if (ERR_NOSUCHCHANNEL == code)
-        msg += "403 :No such channel\r\n" RESET;
-    else if (ERR_NORECIPIENT == code)
-        msg += "\r\n" RESET;
-    else if (ERR_NOTEXTTOSEND == code)
-        msg += "412 :No text to send\r\n" RESET;
-    else if (ERR_CHANOPRIVSNEEDED == code)
-        msg += "482 :You're not channel operator\r\n" RESET;
-    else if (ERR_NOTONCHANNEL == code)
-        msg += "442 :You're not on that channel\r\n" RESET;
-    else if (ERR_USERONCHANNEL == code)
-        msg += "443 :is already on channel\r\n" RESET;
-    else if (ERR_USERNOTINCHANNEL == code)
-        msg += "441 :They aren't on that channel\r\n" RESET;
-    else if (ERR_UNKNOWNMODE == code)
-        msg += "\r\n" RESET;
-    
-    send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
 
 void Server::modeCMD(int client_fd)
@@ -1161,16 +1197,18 @@ void Server::modeCMD(int client_fd)
         return;
     }
 
-    if (this->channels.count(this->clients[client_fd].second.params.front()) == 0 || !validChanName(this->clients[client_fd].second.params.front()))
+    std::string mode = this->clients[client_fd].second.params[1];
+    std::string chan_name = this->clients[client_fd].second.params.front();
+    if (this->channels.count(chan_name) == 0 || !validChanName(chan_name))
     {
-        serverResponse(client_fd, ERR_NOSUCHCHANNEL, this->clients[client_fd].second.params.front());
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL, chan_name);
         return;
     }
 
     bool IsOperator = false;
-    for (size_t i = 0; i < this->channels[this->clients[client_fd].second.params.front()].operators.size(); i++)
+    for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
     {
-        if (areEqualScandi(this->clients[client_fd].second.nick, this->channels[this->clients[client_fd].second.params.front()].operators[i]))
+        if (areEqualScandi(this->clients[client_fd].second.nick, this->channels[chan_name].operators[i]))
         {
             IsOperator = true;
         }
@@ -1182,44 +1220,40 @@ void Server::modeCMD(int client_fd)
         return;
     }
 
-    if (this->clients[client_fd].second.params[1] == "+i")
+    if (mode == "+i")
     {
-        this->channels[this->clients[client_fd].second.params.front()].invite_only = true;
+        this->channels[chan_name].invite_only = true;
     }
-    else if (this->clients[client_fd].second.params[1] == "-i")
+    else if (mode == "-i")
     {
-        this->channels[this->clients[client_fd].second.params.front()].invite_only = false;
+        this->channels[chan_name].invite_only = false;
     }
-    else if (this->clients[client_fd].second.params[1] == "-t")
+    else if (mode == "-t")
     {
-        this->channels[this->clients[client_fd].second.params.front()].topic_restricted = true;
+        this->channels[chan_name].topic_restricted = true;
     }
-    else if (this->clients[client_fd].second.params[1] == "-t")
+    else if (mode == "-t")
     {
-        this->channels[this->clients[client_fd].second.params.front()].topic_restricted = false;
+        this->channels[chan_name].topic_restricted = false;
     }
-    else if (this->clients[client_fd].second.params[1] == "+k")
+    else if (mode == "+k")
     {
-        if (this->clients[client_fd].second.params.size() != 3)
+        if (this->clients[client_fd].second.params.size() < 3)
         {
             serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
-        this->channels[this->clients[client_fd].second.params.front()].password = this->clients[client_fd].second.params.back();
+        else if (!this->channels[chan_name].password.empty())
+        {
+            serverResponse(client_fd, ERR_KEYSET, chan_name + " ");
+        }
+        this->channels[chan_name].password = this->clients[client_fd].second.params[2];
     }
-    else if (this->clients[client_fd].second.params[1] == "-k")
+    else if (mode == "-k")
     {
-        if (this->clients[client_fd].second.params.size() != 3)
-        {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
-            return;
-        }
-        if (this->channels[this->clients[client_fd].second.params.front()].password == this->clients[client_fd].second.params.back())
-        {
-            this->channels[this->clients[client_fd].second.params.front()].password.clear();
-        }
+        this->channels[chan_name].password.clear();
     }
-    else if (this->clients[client_fd].second.params[1] == "+o")
+    else if (mode == "+o")
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
@@ -1228,6 +1262,13 @@ void Server::modeCMD(int client_fd)
         }
         std::string chan_name = this->clients[client_fd].second.params[0];
         std::string nick = this->clients[client_fd].second.params[2];
+        for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
+        {
+            if (areEqualScandi(this->channels[chan_name].operators[i], nick))
+            {
+                return;
+            }
+        }
         bool nickInChan = false;
         for (size_t i = 0; i < this->channels[chan_name].members.size(); i++)
         {
@@ -1236,27 +1277,16 @@ void Server::modeCMD(int client_fd)
                 nickInChan = true;
             }
         }
-        bool isOper = false;
-        for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
-        {
-            if (areEqualScandi(this->channels[chan_name].operators[i], nick))
-            {
-                isOper = true;
-            }
-        }
-        if (!nickInChan && !isOper)
+        if (!nickInChan)
         {
             serverResponse(client_fd, ERR_USERNOTINCHANNEL, nick + " " + chan_name + " ");
             return;
         }
-        else if (!isOper)
-        {
-            std::vector<std::string>& members = this->channels[chan_name].members;
-            members.erase(std::remove(members.begin(), members.end(), nick), members.end());
-            this->channels[chan_name].operators.push_back(nick);
-        }
+        std::vector<std::string>& members = this->channels[chan_name].members;
+        members.erase(std::remove(members.begin(), members.end(), nick), members.end());
+        this->channels[chan_name].operators.push_back(nick);
     }
-    else if (this->clients[client_fd].second.params[1] == "-o")
+    else if (mode == "-o")
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
@@ -1268,7 +1298,6 @@ void Server::modeCMD(int client_fd)
 
         if (this->channels[chan_name].operators.size() == 1)
         {
-            // user is the only chanop
             return;
         }
         bool isOper = false;
@@ -1277,6 +1306,7 @@ void Server::modeCMD(int client_fd)
             if (areEqualScandi(this->channels[chan_name].operators[i], nick))
             {
                 isOper = true;
+                break;
             }
         }
         if (isOper)
@@ -1286,7 +1316,7 @@ void Server::modeCMD(int client_fd)
             this->channels[chan_name].members.push_back(nick);
         }
     }
-    else if (this->clients[client_fd].second.params[1] == "+l")
+    else if (mode == "+l")
     {
         if (this->clients[client_fd].second.params.size() < 3)
         {
@@ -1313,27 +1343,25 @@ void Server::modeCMD(int client_fd)
         this->channels[chan_name].max_users = limit;
         this->channels[chan_name].userlimited = true;
     }
-    else if (this->clients[client_fd].second.params[1] == "-l")
+    else if (mode == "-l")
     {
         if (this->clients[client_fd].second.params.size() < 2)
         {
             serverResponse(client_fd, ERR_NEEDMOREPARAMS, "MODE ");
             return;
         }
-
-        std::string chan_name = this->clients[client_fd].second.params[0];
-        if (this->channels.count(chan_name) == 0)
-        {
-            serverResponse(client_fd, ERR_NOSUCHCHANNEL, chan_name + " ");
-            return;
-        }
         this->channels[chan_name].userlimited = false;
     }
     else
     {
-        char buf[2] = {0};
-        buf[1] = this->clients[client_fd].second.params[1][1];
-        std::string mode = buf;
-        serverResponse(client_fd, ERR_UNKNOWNMODE, mode + " 472 :is unknown mode char to me for " + this->clients[client_fd].second.params[1]);
+        serverResponse(client_fd, ERR_UNKNOWNMODE, mode + " 472 :is unknown mode char to me for " + mode[1]);
+        return ;
     }
+    // :alice!bob@irc.local MODE #chat +k secretkey
+    std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " MODE " + chan_name;
+    for (size_t i = 1; i < this->clients[client_fd].second.params.size(); i++)
+    {
+        message += " " + this->clients[client_fd].second.params[i];
+    }
+    this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message);
 }

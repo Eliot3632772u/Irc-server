@@ -22,5 +22,11 @@ struct Channel
     // is operator to make code cleaner
     // is invited 
     // send message to all memebers
-    void broadcastToAll(std::map<int, std::pair<int, Client> >& clients, int except, std::string message) const;
+    void broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message) const;
 };
+
+
+// PASS checked and works
+// NICK checked and works
+// USER checked and works but .find('@')
+// PRIVMSG checked and probably works
