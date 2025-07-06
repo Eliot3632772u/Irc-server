@@ -9,8 +9,10 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <algorithm>
-#include <sys/epoll.h>
+// #include <sys/epoll.h>
+#include	<sys/event.h>
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>
@@ -33,3 +35,5 @@
 #define PURPLE      "\033[35m"
 #define CYAN        "\033[36m"
 #define ORANGE      "\033[38;5;208m"
+
+#define MSG_NOSIGNAL 0

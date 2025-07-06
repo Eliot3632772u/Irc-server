@@ -69,63 +69,63 @@ void Server::initSocket()
 void Server::creatEpoll()
 {
 
-    this->epollFd = epoll_create1(0);
-    if (this->epollFd < 0)
-        initSocketsError("epoll_create: ", this->socketFd, NULL);
+    // this->epollFd = epoll_create1(0);
+    // if (this->epollFd < 0)
+    //     initSocketsError("epoll_create: ", this->socketFd, NULL);
 
-    struct epoll_event event;
-    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    event.data.fd = this->socketFd;
+    // struct epoll_event event;
+    // event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    // event.data.fd = this->socketFd;
 
-    if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->socketFd, &event) == -1)
-    {
+    // if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->socketFd, &event) == -1)
+    // {
 
-        close(this->epollFd);
-        initSocketsError("epoll_ctl", this->socketFd, NULL);
-    }
+    //     close(this->epollFd);
+    //     initSocketsError("epoll_ctl", this->socketFd, NULL);
+    // }
 
-    /*
+    
         this->kqueueFd = kqueue();
-        if (this->kqFd == -1)
+        if (this->kqueueFd == -1)
             initSocketsError("kqueue: ", this->socketFd, NULL);
 
         struct kevent changes[2];
 
         EV_SET(&changes[0], this->socketFd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
-        EV_SET(&changes[0], this->socketFd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        EV_SET(&changes[1], this->socketFd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
-        if (kevent(this->kqFd, changes, 2, NULL, 0, NULL) == -1) {
+        if (kevent(this->kqueueFd, changes, 2, NULL, 0, NULL) == -1) {
 
-            close(this->kqFd);
-            initSocketsError("kevent (register)", this->socketFd, NULL);
+            close(this->kqueueFd);
+            initSocketsError("kevent ", this->socketFd, NULL);
         }
-    */
+    
 }
 
 void Server::acceptConnections()
 {
 
-    struct epoll_event events[100];
-    // struct kevent events[100];
+    // struct epoll_event events[100];
+    struct kevent events[100];
 
     while (true)
     {
 
-        std::cout << "waiting :" << std::endl;
-        int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
-        // int read_fds = kevent(this->kqFd, NULL, 0, events, 100, NULL);
+        std::cout << YELLOW "Waiting for events..." RESET << std::endl;
+        // int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
+        int ready_fds = kevent(this->kqueueFd, NULL, 0, events, 100, NULL);
         if (ready_fds < 0)
         {
 
             close(this->epollFd);
-            initSocketsError("epoll_event: ", this->socketFd, NULL);
-            // initSocketsError("kevent: ", this->socketFd, NULL);
+            // initSocketsError("epoll_event: ", this->socketFd, NULL);
+            initSocketsError("kevent: ", this->socketFd, NULL);
         }
 
         for (int i = 0; i < ready_fds; i++)
         {
-            int fd = events[i].data.fd;
-            // int fd = events[i].ident;
+            // int fd = events[i].data.fd;
+            int fd = events[i].ident;
             
             if (fd == this->socketFd)
             {
@@ -143,22 +143,24 @@ void Server::acceptConnections()
 
                 fcntl(client_fd, F_SETFL, O_NONBLOCK);
 
-                struct epoll_event event;
-                event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-                event.data.fd = client_fd;
-                // struct kevent event[1];
-                // EV_SET(&event[0], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+                // struct epoll_event event;
+                // event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+                // event.data.fd = client_fd;
+                struct kevent event[1];
+                EV_SET(&event[0], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
-                if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
-                {
+                // if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
+                // {
 
-                    close(this->epollFd);
-                    close(client_fd);
-                    for (size_t i = 0; i < this->clients.size(); i++)
-                        close(this->clients[i].first);
+                //     close(this->epollFd);
+                //     close(client_fd);
+                //     for (size_t i = 0; i < this->clients.size(); i++)
+                //         close(this->clients[i].first);
 
-                    initSocketsError("epoll_ctl", this->socketFd, NULL);
-                }
+                //     initSocketsError("epoll_ctl", this->socketFd, NULL);
+                // }
+
+                std::cout << GREEN "Client <" << client_fd << "> just connected" RESET << std::endl;
 
                 this->clients[client_fd].second.client_fd = client_fd;
 
@@ -178,6 +180,7 @@ void Server::acceptConnections()
 void Server::readReq(int client_fd)
 {
 
+    std::cout << "hello from redreq()" << std::endl;
     char buffer[550] = {0};
 
     ssize_t read_bytes;
@@ -190,6 +193,7 @@ void Server::readReq(int client_fd)
     if (read_bytes == 0)
     {
         // delete_client
+        std::cout << RED "Client <" << client_fd << "> just disconnected" RESET << std::endl;
         close(client_fd);
         this->clients.erase(client_fd);
         return;
@@ -236,6 +240,7 @@ void Server::readReq(int client_fd)
                     return;
                 }
             }
+            std::cout << YELLOW << this->clients[client_fd].second.buffer << " " << client_fd << RESET << std::endl;
             parseCmd(client_fd);
 
         }

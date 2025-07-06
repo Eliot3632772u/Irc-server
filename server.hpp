@@ -51,6 +51,7 @@ struct Server
 
     int socketFd;
     int epollFd;
+    int kqueueFd;
     std::string serverPass;
     std::string serverPort;
     std::map<int, std::pair<int, Client> > clients;
