@@ -83,28 +83,49 @@ void Server::creatEpoll()
         close(this->epollFd);
         initSocketsError("epoll_ctl", this->socketFd, NULL);
     }
+
+    /*
+        this->kqueueFd = kqueue();
+        if (this->kqFd == -1)
+            initSocketsError("kqueue: ", this->socketFd, NULL);
+
+        struct kevent changes[2];
+
+        EV_SET(&changes[0], this->socketFd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        EV_SET(&changes[0], this->socketFd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+
+        if (kevent(this->kqFd, changes, 2, NULL, 0, NULL) == -1) {
+
+            close(this->kqFd);
+            initSocketsError("kevent (register)", this->socketFd, NULL);
+        }
+    */
 }
 
 void Server::acceptConnections()
 {
 
     struct epoll_event events[100];
+    // struct kevent events[100];
 
     while (true)
     {
 
         std::cout << "waiting :" << std::endl;
         int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
+        // int read_fds = kevent(this->kqFd, NULL, 0, events, 100, NULL);
         if (ready_fds < 0)
         {
 
             close(this->epollFd);
             initSocketsError("epoll_event: ", this->socketFd, NULL);
+            // initSocketsError("kevent: ", this->socketFd, NULL);
         }
 
         for (int i = 0; i < ready_fds; i++)
         {
             int fd = events[i].data.fd;
+            // int fd = events[i].ident;
             
             if (fd == this->socketFd)
             {
@@ -124,6 +145,8 @@ void Server::acceptConnections()
                 struct epoll_event event;
                 event.events = EPOLLIN | EPOLLOUT | EPOLLET;
                 event.data.fd = client_fd;
+                // struct kevent event[1];
+                // EV_SET(&event[0], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
                 if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
                 {
@@ -142,10 +165,8 @@ void Server::acceptConnections()
             }
             else
             {
-                // parse cmd
+                // check this->events[i].filter == EVFILT_WRITE | EVFILT_READ if ready for write and read if not return 
                 readReq(fd);
-                // if (!this->clients[fd].second.command.empty())
-                //     handleMessage(fd);
             }
         }
     }
