@@ -2,8 +2,6 @@
 
 #include "inc.hpp"
 
-bool areEqualScandi(const std::string& one, const std::string& two);
-
 struct Client
 {
     int client_fd;

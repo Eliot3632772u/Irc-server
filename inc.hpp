@@ -43,5 +43,3 @@
 #define PURPLE      "\033[35m"
 #define CYAN        "\033[36m"
 #define ORANGE      "\033[38;5;208m"
-
-// #define MSG_NOSIGNAL 0

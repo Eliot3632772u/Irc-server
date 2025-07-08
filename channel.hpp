@@ -5,6 +5,7 @@
 
 struct Channel
 {
+    Channel();
     bool invite_only;
     bool userlimited;
     size_t max_users;
@@ -15,20 +16,7 @@ struct Channel
     std::vector<std::string> members;
     std::vector<std::string> operators;
     std::vector<std::string> invited_users;
-
-    Channel();
-
-    bool isAnyMember(const std::string& nick) const; // check is memebrs and operators
-    // is operator to make code cleaner
-    // is invited 
-    // send message to all memebers
-    void broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message, bool include_sender) const;
-
     void removeMember(std::string nick);
+    bool isAnyMember(const std::string& nick) const;
+    void broadcastToAll(std::map<int, std::pair<int, Client> >& recipients, Client& sender, std::string message, bool include_sender) const;
 };
-
-
-// PASS checked and works
-// NICK checked and works
-// USER checked and works but .find('@')
-// PRIVMSG checked and probably works
