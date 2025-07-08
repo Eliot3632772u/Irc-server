@@ -88,20 +88,19 @@ void Server::creatEpoll()
     }
     #elif __APPLE__
     {
-        // this->kqueueFd = kqueue();
-        // if (this->kqueueFd == -1)
-        //     initSocketsError("kqueue: ", this->socketFd, NULL);
+        this->kqueueFd = kqueue();
+        if (this->kqueueFd == -1)
+            initSocketsError("kqueue: ", this->socketFd, NULL);
 
-        // struct kevent changes[1];
+        struct kevent changes[1];
 
-        // EV_SET(&changes[0], this->socketFd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
-        // // EV_SET(&changes[1], this->socketFd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        EV_SET(&changes[0], this->socketFd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
-        // if (kevent(this->kqueueFd, changes, 1, NULL, 0, NULL) == -1) {
+        if (kevent(this->kqueueFd, changes, 1, NULL, 0, NULL) == -1) {
 
-        //     close(this->kqueueFd);
-        //     initSocketsError("kevent ", this->socketFd, NULL);
-        // }
+            close(this->kqueueFd);
+            initSocketsError("kevent ", this->socketFd, NULL);
+        }
     }
     #else
         #error "Unsupported platform"
@@ -166,7 +165,10 @@ void Server::acceptConnections()
                 }
 
                 // PROTECT FCNTL
-                fcntl(client_fd, F_SETFL, O_NONBLOCK);
+                if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1)
+                {
+
+                }
 
                 #ifdef __linux__
                     struct epoll_event event;
@@ -185,18 +187,21 @@ void Server::acceptConnections()
                 #elif __APPLE__
                     struct kevent events[1];
                     EV_SET(&events[0], client_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
-                    EV_SET(&events[1], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+                    // EV_SET(&events[1], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
                     if (kevent(this->kqueueFd, events, 1, NULL, 0, NULL) == -1) {
-                        perror("kevent client add");
+
+                        close(this->epollFd);
                         close(client_fd);
-                        continue;
+                        for (size_t i = 0; i < this->clients.size(); i++)
+                            close(this->clients[i].first);
+                        initSocketsError("Kevent client add", this->socketFd, NULL);
                     }
                 #else
                     #error "Unsupported platform"
                 #endif
 
-                std::cout <<"" "Client <" << client_fd << "> just connected" << std::endl;
+                std::cout <<GREEN "Client <" << client_fd << "> just connected" RESET<< std::endl;
 
                 this->clients[client_fd].second.client_fd = client_fd;
                 this->clients[client_fd].second.host = inet_ntoa(client_addr.sin_addr);
@@ -228,7 +233,7 @@ void Server::readReq(int client_fd)
     if (read_bytes == 0)
     {
         // delete_client
-        std::cout <<"" "Client <" << client_fd << "> just disconnected" << std::endl;
+        std::cout <<RED "Client <" << client_fd << "> just disconnected" RESET<< std::endl;
         close(client_fd);
         this->clients.erase(client_fd);
         return;
