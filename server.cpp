@@ -319,9 +319,6 @@ void Server::parseCmd(int client_fd)
         command = buffer.substr(0, commandl);
     else{
 
-        
-        clearClientData(client_fd);
-        serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
         serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
         return;
     }
@@ -331,8 +328,6 @@ void Server::parseCmd(int client_fd)
         
         if (!isalpha(command[i]))
         {
-            clearClientData(client_fd);
-            serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
             serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
             return;
         }
@@ -393,8 +388,6 @@ void Server::parseCmd(int client_fd)
 
     if (this->clients[client_fd].second.params.size() > 15 || this->clients[client_fd].second.params.size() == 0)
     {
-
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS, command + " ");
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, command + " ");
         return;
     }
@@ -414,7 +407,6 @@ void Server::clearClientData(int client_fd)
 
 void Server::serverResponse(int client_fd, enum status code, std::string msg)
 {
-    msg.insert(0, ":irc.server.ma ");
     msg.insert(0, ":irc.server.ma ");
     if (ERR_ERRONEUSNICKNAME == code)
         msg += "432 :Erroneous nickname\r\n";
@@ -469,6 +461,7 @@ void Server::serverResponse(int client_fd, enum status code, std::string msg)
     else if (RPL_INVITING == code)
         msg += "\r\n";
     
+    clearClientData(client_fd);
     send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
 
@@ -515,8 +508,6 @@ void Server::botCMD(int client_fd){
     if (this->clients[client_fd].second.params.size() != 1)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, this->clients[client_fd].second.command + " ");
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS, this->clients[client_fd].second.command + " ");
-        clearClientData(client_fd);
         return ;
     }
 
@@ -542,7 +533,6 @@ void Server::botCMD(int client_fd){
             if (send(client_fd, message[i].c_str(), message[i].size(), MSG_NOSIGNAL) == -1)
                 perror("Bot send: ");
         }
-        clearClientData(client_fd);
         return;
     }
     else if(this->clients[client_fd].second.params.front() == "time"){
@@ -572,8 +562,6 @@ void Server::handleMessage(int client_fd)
     if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
     {
         serverResponse(client_fd, ERR_NOSUCHNICK, this->clients[client_fd].second.nick);
-        serverResponse(client_fd, ERR_NOSUCHNICK, this->clients[client_fd].second.nick);
-        clearClientData(client_fd);
         return;
     }
     if (this->clients[client_fd].second.command == "PASS")
@@ -601,8 +589,6 @@ void Server::handleMessage(int client_fd)
 	else
 	{
 		serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
-		serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
-		clearClientData(client_fd);
 		return ;
     }
 }
@@ -612,24 +598,18 @@ void Server::passCMD(int client_fd)
     if (this->clients[client_fd].second.is_pass_set)
     {
         serverResponse(client_fd, ERR_ALREADYREGISTRED, "");
-        serverResponse(client_fd, ERR_ALREADYREGISTRED, "");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.size() > 1)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, this->clients[client_fd].second.command + " ");
-        serverResponse(client_fd, ERR_NEEDMOREPARAMS, this->clients[client_fd].second.command + " ");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.empty() || this->clients[client_fd].second.params.front() != this->serverPass)
     {
         serverResponse(client_fd, ERR_PASSWDMISMATCH, "");
-        serverResponse(client_fd, ERR_PASSWDMISMATCH, "");
-        clearClientData(client_fd);
         return;
     }
 
@@ -642,24 +622,18 @@ void Server::nickCMD(int client_fd)
     if (this->clients[client_fd].second.is_pass_set == false)
     {
         serverResponse(client_fd, ERR_NOTREGISTERED, "");
-        serverResponse(client_fd, ERR_NOTREGISTERED, "");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.size() > 1)
     {
         serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-        serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.empty())
     {
         serverResponse(client_fd, ERR_NONICKNAMEGIVEN, "");
-        serverResponse(client_fd, ERR_NONICKNAMEGIVEN, "");
-        clearClientData(client_fd);
         return;
     }
 
@@ -668,8 +642,6 @@ void Server::nickCMD(int client_fd)
         if (this->clients[i].second.nick == this->clients[client_fd].second.params.front())
         {
             serverResponse(client_fd, ERR_NICKNAMEINUSE, this->clients[client_fd].second.nick + " ");
-            serverResponse(client_fd, ERR_NICKNAMEINUSE, this->clients[client_fd].second.nick + " ");
-            clearClientData(client_fd);
             return;
         }
     }
@@ -677,8 +649,6 @@ void Server::nickCMD(int client_fd)
     if (this->clients[client_fd].second.params.front().size() > 9)
     {
         serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-        serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-        clearClientData(client_fd);
         return;
     }
 
@@ -686,8 +656,6 @@ void Server::nickCMD(int client_fd)
     if (!std::isalpha(c) && std::string("[]\\`_^{|}").find(c) == std::string::npos)
     {
         serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-        serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-        clearClientData(client_fd);
         return;
     }
 
@@ -697,7 +665,6 @@ void Server::nickCMD(int client_fd)
         if (!std::isalnum(c) && std::string("[]\\`_^{|}-").find(c) == std::string::npos)
         {
             serverResponse(client_fd, ERR_ERRONEUSNICKNAME, this->clients[client_fd].second.nick + " ");
-            clearClientData(client_fd);
             return;
         }
     }
@@ -718,28 +685,24 @@ void Server::userCMD(int client_fd)
     if (this->clients[client_fd].second.authenticated)
     {
         serverResponse(client_fd, ERR_ALREADYREGISTRED, "");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.size() != 4)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, "USER ");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.front().size() > 9)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, "USER ");
-        clearClientData(client_fd);
         return;
     }
 
     if (this->clients[client_fd].second.params.front().find('@') != std::string::npos)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, "USER ");
-        clearClientData(client_fd);
         return;
     }
 
@@ -892,6 +855,7 @@ void Server::joinCMD(int client_fd)
             this->channels[name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
         }
     }
+    clearClientData(client_fd);
 }
 
 void Server::privmsgCMD(int client_fd)
@@ -969,6 +933,7 @@ void Server::privmsgCMD(int client_fd)
             serverResponse(client_fd, ERR_NOSUCHCHANNEL, target + " ");
         }
     }
+    clearClientData(client_fd);
 }
 
 void Server::kickCMD(int client_fd)
@@ -1030,6 +995,7 @@ void Server::kickCMD(int client_fd)
     chan.broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
 
     chan.removeMember(targetNick);
+    clearClientData(client_fd);
 }
 
 void Server::sendMessageByNick(std::string nick, std::string message)
@@ -1174,6 +1140,7 @@ void Server::topicCMD(int client_fd)
             serverResponse(client_fd, RPL_TOPIC, chan_name + " :" + this->channels[chan_name].topic);
         }
     }
+    clearClientData(client_fd);
 }
 
 void Server::modeCMD(int client_fd)
@@ -1395,4 +1362,5 @@ void Server::modeCMD(int client_fd)
         }
         this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
     }
+    clearClientData(client_fd);
 }
