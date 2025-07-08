@@ -323,18 +323,17 @@ void Server::parseCmd(int client_fd)
         return;
     }
     
-    for (size_t i = 0; i < command.size(); i++)
-    {
-        
-        if (!isalpha(command[i]))
-        {
-            serverResponse(client_fd, ERR_UNKNOWNCOMMAND, command + " ");
-            return;
-        }
-    }
-    
     this->clients[client_fd].second.command = command;
     
+    for (size_t i = 0; i < command.size(); i++){
+
+        if ((int)command[i] < 32 || (int)command[i] > 126){
+
+            serverResponse(client_fd, ERR_UNKNOWNCOMMAND, "INVALID CHARS ");
+            return ;
+        }
+    }
+
     if (commandl + 1 < buffer.size()){
 
         buffer = buffer.substr(commandl + 1);
@@ -386,7 +385,7 @@ void Server::parseCmd(int client_fd)
         this->clients[client_fd].second.params.push_back(param);
     }
 
-    if (this->clients[client_fd].second.params.size() > 15 || this->clients[client_fd].second.params.size() == 0)
+    if (this->clients[client_fd].second.params.size() > 15)
     {
         serverResponse(client_fd, ERR_NEEDMOREPARAMS, command + " ");
         return;
