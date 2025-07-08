@@ -69,51 +69,51 @@ void Server::initSocket()
 void Server::creatEpoll()
 {
 
-    // this->epollFd = epoll_create1(0);
-    // if (this->epollFd < 0)
-    //     initSocketsError("epoll_create: ", this->socketFd, NULL);
+    this->epollFd = epoll_create1(0);
+    if (this->epollFd < 0)
+        initSocketsError("epoll_create: ", this->socketFd, NULL);
 
-    // struct epoll_event event;
-    // event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    // event.data.fd = this->socketFd;
+    struct epoll_event event;
+    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    event.data.fd = this->socketFd;
 
-    // if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->socketFd, &event) == -1)
-    // {
+    if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->socketFd, &event) == -1)
+    {
 
-    //     close(this->epollFd);
-    //     initSocketsError("epoll_ctl", this->socketFd, NULL);
-    // }
+        close(this->epollFd);
+        initSocketsError("epoll_ctl", this->socketFd, NULL);
+    }
 
     
-        this->kqueueFd = kqueue();
-        if (this->kqueueFd == -1)
-            initSocketsError("kqueue: ", this->socketFd, NULL);
+        // this->kqueueFd = kqueue();
+        // if (this->kqueueFd == -1)
+        //     initSocketsError("kqueue: ", this->socketFd, NULL);
 
-        struct kevent changes[1];
+        // struct kevent changes[1];
 
-        EV_SET(&changes[0], this->socketFd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
-        // EV_SET(&changes[1], this->socketFd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        // EV_SET(&changes[0], this->socketFd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+        // // EV_SET(&changes[1], this->socketFd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
-        if (kevent(this->kqueueFd, changes, 1, NULL, 0, NULL) == -1) {
+        // if (kevent(this->kqueueFd, changes, 1, NULL, 0, NULL) == -1) {
 
-            close(this->kqueueFd);
-            initSocketsError("kevent ", this->socketFd, NULL);
-        }
+        //     close(this->kqueueFd);
+        //     initSocketsError("kevent ", this->socketFd, NULL);
+        // }
     
 }
 
 void Server::acceptConnections()
 {
 
-    // struct epoll_event events[100];
-    struct kevent events[100];
+    struct epoll_event events[100];
+    // struct kevent events[100];
 
     while (true)
     {
 
         std::cout <<"" "Waiting for events..." << std::endl;
-        // int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
-        int ready_fds = kevent(this->kqueueFd, NULL, 0, events, 100, NULL);
+        int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
+        // int ready_fds = kevent(this->kqueueFd, NULL, 0, events, 100, NULL);
         if (ready_fds < 0)
         {
 
@@ -124,8 +124,8 @@ void Server::acceptConnections()
 
         for (int i = 0; i < ready_fds; i++)
         {
-            // int fd = events[i].data.fd;
-            int fd = events[i].ident;
+            int fd = events[i].data.fd;
+            // int fd = events[i].ident;
             
             if (fd == this->socketFd)
             {
@@ -143,29 +143,31 @@ void Server::acceptConnections()
 
                 fcntl(client_fd, F_SETFL, O_NONBLOCK);
 
-                // struct epoll_event event;
-                // event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-                // event.data.fd = client_fd;
-                struct kevent events[1];
-                EV_SET(&events[0], client_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+                struct epoll_event event;
+                event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+                event.data.fd = client_fd;
+
+
+                // struct kevent events[1];
+                // EV_SET(&events[0], client_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
                 // EV_SET(&events[1], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
-                if (kevent(this->kqueueFd, events, 1, NULL, 0, NULL) == -1) {
-                    perror("kevent client add");
-                    close(client_fd);
-                    continue;
-                }
-
-                // if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
-                // {
-
-                //     close(this->epollFd);
+                // if (kevent(this->kqueueFd, events, 1, NULL, 0, NULL) == -1) {
+                //     perror("kevent client add");
                 //     close(client_fd);
-                //     for (size_t i = 0; i < this->clients.size(); i++)
-                //         close(this->clients[i].first);
-
-                //     initSocketsError("epoll_ctl", this->socketFd, NULL);
+                //     continue;
                 // }
+
+                if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
+                {
+
+                    close(this->epollFd);
+                    close(client_fd);
+                    for (size_t i = 0; i < this->clients.size(); i++)
+                        close(this->clients[i].first);
+
+                    initSocketsError("epoll_ctl", this->socketFd, NULL);
+                }
 
                 std::cout <<"" "Client <" << client_fd << "> just connected" << std::endl;
 
@@ -178,9 +180,9 @@ void Server::acceptConnections()
             else
             {
                 // check this->events[i].filter == EVFILT_WRITE | EVFILT_READ if ready for write and read if not return 
-                if (events[i].filter == EVFILT_READ) {
+                // if (events[i].filter == EVFILT_READ) {
                     readReq(fd);  // handle readable socket
-                }
+                // }
             }
         }
     }
@@ -936,6 +938,11 @@ void Server::privmsgCMD(int client_fd)
         serverResponse(client_fd, ERR_NOTEXTTOSEND,"", "");
         return;
     }
+    if (this->clients[client_fd].second.params.size() > 2)
+    {
+        serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "");
+        return;
+    }
 
     std::string target;
     std::vector<std::string> users;
@@ -1211,8 +1218,33 @@ void Server::modeCMD(int client_fd)
         return;
     }
 
-    std::string mode = this->clients[client_fd].second.params[1];
+    std::string modes = this->clients[client_fd].second.params[1];
     std::string chan_name = this->clients[client_fd].second.params.front();
+
+    std::string action = "";
+    std::vector<std::string> flags;
+    for (size_t i = 0; i < modes.size(); i++)
+    {
+        if (modes[i] == '+')
+        {
+            action = '+';
+        }
+        else if (modes[i] == '-')
+        {
+            action = '-';
+        }
+        else
+        {
+            flags.push_back(action + modes[i]);
+        }
+    }
+
+    std::vector<std::string> params;
+    for (size_t i = 2; i < this->clients[client_fd].second.params.size(); i++)
+    {
+        params.push_back(this->clients[client_fd].second.params[i]);
+    }
+
     if (this->channels.count(chan_name) == 0 || !validChanName(chan_name))
     {
         serverResponse(client_fd, ERR_NOSUCHCHANNEL,"", chan_name);
@@ -1234,147 +1266,167 @@ void Server::modeCMD(int client_fd)
         return;
     }
 
-    if (mode == "+i")
+    std::vector<std::string>::iterator params_it = params.begin();
+    for (size_t i = 0; i < flags.size(); i++)
     {
-        this->channels[chan_name].invite_only = true;
-    }
-    else if (mode == "-i")
-    {
-        this->channels[chan_name].invite_only = false;
-    }
-    else if (mode == "-t")
-    {
-        this->channels[chan_name].topic_restricted = true;
-    }
-    else if (mode == "-t")
-    {
-        this->channels[chan_name].topic_restricted = false;
-    }
-    else if (mode == "+k")
-    {
-        if (this->clients[client_fd].second.params.size() < 3)
+        std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " MODE " + chan_name;
+        if (flags[i] == "+i")
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
-            return;
+            this->channels[chan_name].invite_only = true;
+            message += " " + flags[i];
         }
-        else if (!this->channels[chan_name].password.empty())
+        else if (flags[i] == "-i")
         {
-            serverResponse(client_fd, ERR_KEYSET,"", chan_name + " ");
+            this->channels[chan_name].invite_only = false;
+            message += " " + flags[i];
         }
-        this->channels[chan_name].password = this->clients[client_fd].second.params[2];
-    }
-    else if (mode == "-k")
-    {
-        this->channels[chan_name].password.clear();
-    }
-    else if (mode == "+o")
-    {
-        if (this->clients[client_fd].second.params.size() < 3)
+        else if (flags[i] == "-t")
         {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
-            return;
+            this->channels[chan_name].topic_restricted = true;
+            message += " " + flags[i];
         }
-        std::string chan_name = this->clients[client_fd].second.params[0];
-        std::string nick = this->clients[client_fd].second.params[2];
-        for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
+        else if (flags[i] == "-t")
         {
-            if (areEqualScandi(this->channels[chan_name].operators[i], nick))
+            this->channels[chan_name].topic_restricted = false;
+            message += " " + flags[i];
+        }
+        else if (flags[i] == "+k")
+        {
+            if (params_it == params.end())
+            {
+                serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
+                return;
+            }
+            else if (!this->channels[chan_name].password.empty())
+            {
+                serverResponse(client_fd, ERR_KEYSET,"", chan_name + " ");
+            }
+            this->channels[chan_name].password = *params_it;
+
+
+            message += " " + flags[i] + " " + *params_it;
+            params_it++;
+        }
+        else if (flags[i] == "-k")
+        {
+            this->channels[chan_name].password.clear();
+            // params_it++; ?????
+            message += " " + flags[i];
+        }
+        else if (flags[i] == "+o")
+        {
+            if (params_it == params.end())
+            {
+                serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
+                return;
+            }
+            std::string nick = *params_it;
+            for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
+            {
+                if (areEqualScandi(this->channels[chan_name].operators[i], nick))
+                {
+                    return;
+                }
+            }
+            bool nickInChan = false;
+            for (size_t i = 0; i < this->channels[chan_name].members.size(); i++)
+            {
+                if (areEqualScandi(this->channels[chan_name].members[i], nick))
+                {
+                    nickInChan = true;
+                }
+            }
+            if (!nickInChan)
+            {
+                serverResponse(client_fd, ERR_USERNOTINCHANNEL,"", nick + " " + chan_name + " ");
+                return;
+            }
+            std::vector<std::string>& members = this->channels[chan_name].members;
+            members.erase(std::remove(members.begin(), members.end(), nick), members.end()); // needs remove if rather
+            this->channels[chan_name].operators.push_back(nick);
+
+
+            message += " " + flags[i] + " " + *params_it;
+            params_it++;
+        }
+        else if (flags[i] == "-o")
+        {
+            if (params_it == params.end())
+            {
+                serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
+                return;
+            }
+
+            std::string nick = *params_it;
+
+            if (this->channels[chan_name].operators.size() == 1)
             {
                 return;
             }
-        }
-        bool nickInChan = false;
-        for (size_t i = 0; i < this->channels[chan_name].members.size(); i++)
-        {
-            if (areEqualScandi(this->channels[chan_name].members[i], nick))
+            bool isOper = false;
+            for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
             {
-                nickInChan = true;
+                if (areEqualScandi(this->channels[chan_name].operators[i], nick))
+                {
+                    isOper = true;
+                    break;
+                }
             }
-        }
-        if (!nickInChan)
-        {
-            serverResponse(client_fd, ERR_USERNOTINCHANNEL,"", nick + " " + chan_name + " ");
-            return;
-        }
-        std::vector<std::string>& members = this->channels[chan_name].members;
-        members.erase(std::remove(members.begin(), members.end(), nick), members.end());
-        this->channels[chan_name].operators.push_back(nick);
-    }
-    else if (mode == "-o")
-    {
-        if (this->clients[client_fd].second.params.size() < 3)
-        {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
-            return;
-        }
-        std::string chan_name = this->clients[client_fd].second.params[0];
-        std::string nick = this->clients[client_fd].second.params[2];
-
-        if (this->channels[chan_name].operators.size() == 1)
-        {
-            return;
-        }
-        bool isOper = false;
-        for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
-        {
-            if (areEqualScandi(this->channels[chan_name].operators[i], nick))
+            if (isOper)
             {
-                isOper = true;
-                break;
+                std::vector<std::string>& ops = this->channels[chan_name].operators;
+                ops.erase(std::remove(ops.begin(), ops.end(), nick), ops.end());
+                this->channels[chan_name].members.push_back(nick);
             }
-        }
-        if (isOper)
-        {
-            std::vector<std::string>& ops = this->channels[chan_name].operators;
-            ops.erase(std::remove(ops.begin(), ops.end(), nick), ops.end());
-            this->channels[chan_name].members.push_back(nick);
-        }
-    }
-    else if (mode == "+l")
-    {
-        if (this->clients[client_fd].second.params.size() < 3)
-        {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
-            return;
-        }
-        size_t limit;
-        std::stringstream ss(this->clients[client_fd].second.params[2]);
 
-        ss >> limit;
-        if (!ss.eof() || ss.fail())
-        {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
-            return;
+            message += " " + flags[i] + " " + *params_it;
+            params_it++; // necesasry unlike with -k option where the key can be optional and ignored
         }
+        else if (flags[i] == "+l")
+        {
+            if (params_it == params.end())
+            {
+                serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
+                return;
+            }
 
-        std::string chan_name = this->clients[client_fd].second.params[0];
-        if (this->channels.count(chan_name) == 0)
-        {
-            serverResponse(client_fd, ERR_NOSUCHCHANNEL,"", chan_name + " ");
-            return;
-        }
+            size_t limit;
+            std::stringstream ss(*params_it);
 
-        this->channels[chan_name].max_users = limit;
-        this->channels[chan_name].userlimited = true;
-    }
-    else if (mode == "-l")
-    {
-        if (this->clients[client_fd].second.params.size() < 2)
-        {
-            serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
-            return;
+            ss >> limit;
+            if (!ss.eof() || ss.fail())
+            {
+                serverResponse(client_fd, ERR_NEEDMOREPARAMS,"", "MODE ");
+                return;
+            }
+
+            if (this->channels.count(chan_name) == 0)
+            {
+                serverResponse(client_fd, ERR_NOSUCHCHANNEL,"", chan_name + " ");
+                return;
+            }
+
+            this->channels[chan_name].max_users = limit;
+            this->channels[chan_name].userlimited = true;
+
+            message += " " + flags[i] + " " + *params_it;
+            params_it++;
         }
-        this->channels[chan_name].userlimited = false;
+        else if (flags[i] == "-l")
+        {
+            this->channels[chan_name].userlimited = false;
+            message += " " + flags[i];
+        }
+        else
+        {
+            serverResponse(client_fd, ERR_UNKNOWNMODE,"", flags[i] + " 472 :is unknown mode char to me for " + flags[i][1]);
+            return ;
+        }
+        // std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " MODE " + chan_namee
+        // for (size_t i = 1; i < this->clients[client_fd].second.params.size(); i++)
+        // {
+        //     message += " " + this->clients[client_fd].second.params[i];
+        // }
+        this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
     }
-    else
-    {
-        serverResponse(client_fd, ERR_UNKNOWNMODE,"", mode + " 472 :is unknown mode char to me for " + mode[1]);
-        return ;
-    }
-    std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " MODE " + chan_name;
-    for (size_t i = 1; i < this->clients[client_fd].second.params.size(); i++)
-    {
-        message += " " + this->clients[client_fd].second.params[i];
-    }
-    this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
 }
