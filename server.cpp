@@ -69,22 +69,25 @@ void Server::initSocket()
 void Server::creatEpoll()
 {
 
-    this->epollFd = epoll_create1(0);
-    if (this->epollFd < 0)
-        initSocketsError("epoll_create: ", this->socketFd, NULL);
-
-    struct epoll_event event;
-    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    event.data.fd = this->socketFd;
-
-    if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->socketFd, &event) == -1)
+    #ifdef __linux__
     {
+        this->epollFd = epoll_create1(0);
+        if (this->epollFd < 0)
+            initSocketsError("epoll_create: ", this->socketFd, NULL);
 
-        close(this->epollFd);
-        initSocketsError("epoll_ctl", this->socketFd, NULL);
+        struct epoll_event event;
+        event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+        event.data.fd = this->socketFd;
+
+        if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->socketFd, &event) == -1)
+        {
+
+            close(this->epollFd);
+            initSocketsError("epoll_ctl", this->socketFd, NULL);
+        }
     }
-
-    
+    #elif __APPLE__
+    {
         // this->kqueueFd = kqueue();
         // if (this->kqueueFd == -1)
         //     initSocketsError("kqueue: ", this->socketFd, NULL);
@@ -99,33 +102,56 @@ void Server::creatEpoll()
         //     close(this->kqueueFd);
         //     initSocketsError("kevent ", this->socketFd, NULL);
         // }
+    }
+    #else
+        #error "Unsupported platform"
+    #endif
     
 }
 
 void Server::acceptConnections()
 {
-
-    struct epoll_event events[100];
-    // struct kevent events[100];
+    #ifdef __linux__
+        struct epoll_event events[100];
+    #elif __APPLE__
+        struct kevent events[100];
+    #else
+        #error "Unsupported platform"
+    #endif
 
     while (true)
     {
-
         std::cout <<"" "Waiting for events..." << std::endl;
-        int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
-        // int ready_fds = kevent(this->kqueueFd, NULL, 0, events, 100, NULL);
+
+        #ifdef __linux__
+            int ready_fds = epoll_wait(this->epollFd, events, 100, -1);
+        #elif __APPLE__
+            int ready_fds = kevent(this->kqueueFd, NULL, 0, events, 100, NULL);
+        #else
+            #error "Unsupported platform"
+        #endif
         if (ready_fds < 0)
         {
 
             close(this->epollFd);
-            // initSocketsError("epoll_event: ", this->socketFd, NULL);
-            initSocketsError("kevent: ", this->socketFd, NULL);
+            #ifdef __linux__
+                initSocketsError("epoll_event: ", this->socketFd, NULL);
+            #elif __APPLE__
+                initSocketsError("kevent: ", this->socketFd, NULL);
+            #else
+                #error "Unsupported platform"
+            #endif
         }
 
         for (int i = 0; i < ready_fds; i++)
         {
-            int fd = events[i].data.fd;
-            // int fd = events[i].ident;
+            #ifdef __linux__
+                int fd = events[i].data.fd;
+            #elif __APPLE__
+                int fd = events[i].ident;
+            #else
+                #error "Unsupported platform"
+            #endif
             
             if (fd == this->socketFd)
             {
@@ -133,48 +159,47 @@ void Server::acceptConnections()
                 struct sockaddr_in client_addr;
                 socklen_t addr_len = sizeof(client_addr);
                 int client_fd = accept(fd, (struct sockaddr *)&client_addr, &addr_len);
-                // int client_fd = accept(fd, NULL, NULL);
                 if (client_fd < 0)
                 {
-
                     close(this->epollFd);
                     initSocketsError("accept: ", this->socketFd, NULL);
                 }
 
+                // PROTECT FCNTL
                 fcntl(client_fd, F_SETFL, O_NONBLOCK);
 
-                struct epoll_event event;
-                event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-                event.data.fd = client_fd;
+                #ifdef __linux__
+                    struct epoll_event event;
+                    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+                    event.data.fd = client_fd;
+                    if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
+                    {
 
+                        close(this->epollFd);
+                        close(client_fd);
+                        for (size_t i = 0; i < this->clients.size(); i++)
+                            close(this->clients[i].first);
 
-                // struct kevent events[1];
-                // EV_SET(&events[0], client_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
-                // EV_SET(&events[1], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
+                        initSocketsError("epoll_ctl", this->socketFd, NULL);
+                    }
+                #elif __APPLE__
+                    struct kevent events[1];
+                    EV_SET(&events[0], client_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);
+                    EV_SET(&events[1], client_fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, 0, 0, NULL);
 
-                // if (kevent(this->kqueueFd, events, 1, NULL, 0, NULL) == -1) {
-                //     perror("kevent client add");
-                //     close(client_fd);
-                //     continue;
-                // }
-
-                if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1)
-                {
-
-                    close(this->epollFd);
-                    close(client_fd);
-                    for (size_t i = 0; i < this->clients.size(); i++)
-                        close(this->clients[i].first);
-
-                    initSocketsError("epoll_ctl", this->socketFd, NULL);
-                }
+                    if (kevent(this->kqueueFd, events, 1, NULL, 0, NULL) == -1) {
+                        perror("kevent client add");
+                        close(client_fd);
+                        continue;
+                    }
+                #else
+                    #error "Unsupported platform"
+                #endif
 
                 std::cout <<"" "Client <" << client_fd << "> just connected" << std::endl;
 
                 this->clients[client_fd].second.client_fd = client_fd;
-
                 this->clients[client_fd].second.host = inet_ntoa(client_addr.sin_addr);
-
                 continue;
             }
             else
@@ -1251,6 +1276,7 @@ void Server::modeCMD(int client_fd)
         return;
     }
 
+
     bool IsOperator = false;
     for (size_t i = 0; i < this->channels[chan_name].operators.size(); i++)
     {
@@ -1303,14 +1329,12 @@ void Server::modeCMD(int client_fd)
             }
             this->channels[chan_name].password = *params_it;
 
-
             message += " " + flags[i] + " " + *params_it;
             params_it++;
         }
         else if (flags[i] == "-k")
         {
             this->channels[chan_name].password.clear();
-            // params_it++; ?????
             message += " " + flags[i];
         }
         else if (flags[i] == "+o")
@@ -1422,11 +1446,6 @@ void Server::modeCMD(int client_fd)
             serverResponse(client_fd, ERR_UNKNOWNMODE,"", flags[i] + " 472 :is unknown mode char to me for " + flags[i][1]);
             return ;
         }
-        // std::string message = ":" + this->clients[client_fd].second.nick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " MODE " + chan_namee
-        // for (size_t i = 1; i < this->clients[client_fd].second.params.size(); i++)
-        // {
-        //     message += " " + this->clients[client_fd].second.params[i];
-        // }
         this->channels[chan_name].broadcastToAll(this->clients, this->clients[client_fd].second, message, true);
     }
 }
