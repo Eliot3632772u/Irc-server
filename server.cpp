@@ -464,26 +464,6 @@ void Server::serverResponse(int client_fd, enum status code, std::string msg)
     send(client_fd, msg.c_str(), msg.size(), MSG_NOSIGNAL);
 }
 
-std::string toLowerScandi(std::string &str)
-{
-    std::string lower = str;
-    for (size_t i = 0; i < str.size(); i++)
-    {
-        char &c = str[i];
-        if (c >= 'A' && c <= 'Z')
-            lower[i] = c + 32;
-        else if (c == '[')
-            lower[i] = '{';
-        else if (c == ']')
-            lower[i] = '}';
-        else if (c == '\\')
-            lower[i] = '|';
-        else if (c == '~')
-            lower[i] = '^';
-    }
-    return lower;
-}
-
 bool validChanName(std::string& name)
 {
     if (name.empty() || name.size() > 50)
@@ -491,6 +471,9 @@ bool validChanName(std::string& name)
 
     char& first = name[0];
     if (first != '#' && first != '&')
+        return false;
+    
+    if (name.size() < 2)
         return false;
 
     for (size_t i = 1; i < name.size(); i++)
@@ -546,8 +529,8 @@ void Server::botCMD(int client_fd){
         }
         std::string res = ":irc.server.ma 391 " + this->clients[client_fd].second.nick + " :Current time is ==> ";
         res += std::asctime(std::localtime(&result));
-        if (!res.empty() && res.back() == '\n')
-            res.pop_back();
+        if (!res.empty() && res[res.size() - 1] == '\n')
+            res.erase(res.size() - 1);
         res += "\r\n";
         send(client_fd, res.c_str(), res.size(), MSG_NOSIGNAL);
         clearClientData(client_fd);
@@ -560,7 +543,7 @@ void Server::handleMessage(int client_fd)
     std::string & command = this->clients[client_fd].second.command;
     if (this->clients[client_fd].second.prefix.size() != 0 && this->clients[client_fd].second.prefix != this->clients[client_fd].second.nick)
     {
-        serverResponse(client_fd, ERR_NOSUCHNICK, this->clients[client_fd].second.nick);
+        serverResponse(client_fd, ERR_NOSUCHNICK, this->clients[client_fd].second.nick + " ");
         return;
     }
     if (this->clients[client_fd].second.command == "PASS")
@@ -939,7 +922,7 @@ void Server::kickCMD(int client_fd)
 {
     if (!this->clients[client_fd].second.authenticated)
     {
-        serverResponse(client_fd, ERR_NOTREGISTERED, ":You have not registered");
+        serverResponse(client_fd, ERR_NOTREGISTERED, "");
         return;
     }
     if (this->clients[client_fd].second.params.size() < 2)
@@ -1084,7 +1067,7 @@ void Server::inviteCMD(int client_fd)
     std::string inviteeMessage = ":" + operatorNick + "!" + this->clients[client_fd].second.user + "@" + this->clients[client_fd].second.host + " INVITE " + invited + ":" + chan.name + "\r\n";
     this->sendMessageByNick(invited, inviteeMessage);
 
-    serverResponse(client_fd, RPL_INVITING, chan.name + " " + invited);
+    serverResponse(client_fd, RPL_INVITING, "341 " + chan.name + " " + invited);
 }
 
 void Server::topicCMD(int client_fd)
@@ -1132,11 +1115,11 @@ void Server::topicCMD(int client_fd)
     {
         if (this->channels[chan_name].topic.empty())
         {
-            serverResponse(client_fd, RPL_NOTOPIC, chan_name);
+            serverResponse(client_fd, RPL_NOTOPIC, chan_name + " ");
         }
         else
         {
-            serverResponse(client_fd, RPL_TOPIC, chan_name + " :" + this->channels[chan_name].topic);
+            serverResponse(client_fd, RPL_TOPIC, "332 " + chan_name + " :" + this->channels[chan_name].topic);
         }
     }
     clearClientData(client_fd);
@@ -1185,7 +1168,7 @@ void Server::modeCMD(int client_fd)
 
     if (this->channels.count(chan_name) == 0 || !validChanName(chan_name))
     {
-        serverResponse(client_fd, ERR_NOSUCHCHANNEL, chan_name);
+        serverResponse(client_fd, ERR_NOSUCHCHANNEL, chan_name + " ");
         return;
     }
 

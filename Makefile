@@ -1,6 +1,6 @@
 NAME = ircserv
 CPPC = c++
-FLGS = -std=c++98 -Wall -Wextra -Werror -g -fsanitize=address
+FLGS = -std=c++98 -Wall -Wextra -Werror
 INCS = inc.hpp \
 		server.hpp \
 		channel.hpp \

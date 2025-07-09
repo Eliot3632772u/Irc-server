@@ -35,7 +35,6 @@ enum status
 
 struct Server
 {
-
     int socketFd;
     int epollFd;
     int kqueueFd;
